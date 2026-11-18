@@ -65,7 +65,9 @@ import { Categoria, Conta, Sugestao, Titulo, Transacao } from '../core/models';
                 >
                   <option [ngValue]="null">—</option>
                   @for (c of categorias(); track c.id) {
-                    <option [ngValue]="c.id">{{ c.nome }}</option>
+                    @if (c.ativo || c.id === t.categoria_id) {
+                      <option [ngValue]="c.id">{{ c.nome }}</option>
+                    }
                   }
                 </select>
                 @if (!t.categoria_id && sugestoes().get(t.id); as s) {
@@ -112,8 +114,8 @@ import { Categoria, Conta, Sugestao, Titulo, Transacao } from '../core/models';
       </table>
     </div>
     <label class="regra"
-      ><input type="checkbox" [(ngModel)]="salvarRegra" /> Ao categorizar, criar regra (pelo CPF/CNPJ de
-      quem pagou/recebeu; sem ele, pela descrição)</label
+      ><input type="checkbox" [(ngModel)]="salvarRegra" /> Ao categorizar, criar regra (pelo
+      CPF/CNPJ de quem pagou/recebeu; sem ele, pela descrição)</label
     >
   `,
   styles: `

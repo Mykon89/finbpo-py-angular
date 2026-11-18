@@ -52,7 +52,8 @@ def regra_para(regras: list[RegraCategorizacao], trn: Transacao) -> RegraCategor
 def aplicar_regras(db: Session, entidade_id: int, somente_sem_categoria: bool = True) -> int:
     regras = db.scalars(
         select(RegraCategorizacao)
-        .where(RegraCategorizacao.entidade_id == entidade_id)
+        .join(Categoria, Categoria.id == RegraCategorizacao.categoria_id)
+        .where(RegraCategorizacao.entidade_id == entidade_id, Categoria.ativo.is_(True))
         .order_by(RegraCategorizacao.prioridade, RegraCategorizacao.id)
     ).all()
     if not regras:
@@ -101,7 +102,11 @@ def sugerir(db: Session, entidade_id: int, limite: int = 500) -> list[Sugestao]:
     pendentes = [t for t in todas if not t.categoria_id][:limite]
     if not categorizadas or not pendentes:
         return []
-    nomes = dict(db.execute(select(Categoria.id, Categoria.nome).where(Categoria.entidade_id == entidade_id)).all())
+    nomes = dict(
+        db.execute(
+            select(Categoria.id, Categoria.nome).where(Categoria.entidade_id == entidade_id, Categoria.ativo.is_(True))
+        ).all()
+    )
 
     por_contraparte: dict[int, Counter] = defaultdict(Counter)
     for t in categorizadas:
@@ -117,6 +122,8 @@ def sugerir(db: Session, entidade_id: int, limite: int = 500) -> list[Sugestao]:
     for t in pendentes:
         hist = por_contraparte.get(t.contraparte_id) if t.contraparte_id else None
         if hist:
+            hist = Counter({c: q for c, q in hist.items() if c in nomes})  # ignora categorias desativadas
+        if hist:
             cat, qtd = hist.most_common(1)[0]
             total = sum(hist.values())
             resultado.append(
@@ -130,7 +137,7 @@ def sugerir(db: Session, entidade_id: int, limite: int = 500) -> list[Sugestao]:
         pontos: Counter = Counter()
         exemplos: dict[int, set[str]] = defaultdict(set)
         for dws, cat, saida in docs:
-            if saida != (t.valor < 0):
+            if saida != (t.valor < 0) or cat not in nomes:
                 continue
             comuns = ws & dws
             if not comuns:

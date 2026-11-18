@@ -47,11 +47,80 @@ export interface DadosCNPJ extends Omit<DadosCadastrais, 'documento'> {
   fonte: string;
 }
 
+export type GrupoDRE =
+  | 'receita_bruta'
+  | 'deducoes'
+  | 'custos'
+  | 'despesas_pessoal'
+  | 'despesas_adm'
+  | 'despesas_comerciais'
+  | 'receitas_fin'
+  | 'despesas_fin'
+  | 'impostos_lucro'
+  | 'nao_operacional';
+
+/** Grupos da DRE, na ordem em que aparecem no relatório. */
+export const GRUPOS_DRE: { valor: GrupoDRE; rotulo: string; ajuda: string }[] = [
+  {
+    valor: 'receita_bruta',
+    rotulo: 'Receita bruta',
+    ajuda: 'Faturamento: comissões, procedimentos, vendas, salário (PF)',
+  },
+  {
+    valor: 'deducoes',
+    rotulo: 'Deduções da receita',
+    ajuda: 'Impostos sobre a venda (DAS, ISS), estornos, taxas de cartão',
+  },
+  {
+    valor: 'custos',
+    rotulo: 'Custos',
+    ajuda: 'Gasto direto para gerar a receita: repasses, insumos, comissões',
+  },
+  {
+    valor: 'despesas_pessoal',
+    rotulo: 'Despesas com pessoal',
+    ajuda: 'Salários, encargos, benefícios, pró-labore',
+  },
+  {
+    valor: 'despesas_adm',
+    rotulo: 'Despesas administrativas',
+    ajuda: 'Aluguel, energia, contabilidade, sistemas, seguros, limpeza',
+  },
+  {
+    valor: 'despesas_comerciais',
+    rotulo: 'Despesas comerciais',
+    ajuda: 'Marketing, anúncios, brindes',
+  },
+  {
+    valor: 'receitas_fin',
+    rotulo: 'Receitas financeiras',
+    ajuda: 'Rendimentos de aplicações, juros recebidos',
+  },
+  {
+    valor: 'despesas_fin',
+    rotulo: 'Despesas financeiras',
+    ajuda: 'Tarifas bancárias, juros, multas, IOF',
+  },
+  {
+    valor: 'impostos_lucro',
+    rotulo: 'IRPJ / CSLL',
+    ajuda: 'Impostos sobre o lucro (Lucro Presumido/Real)',
+  },
+  {
+    valor: 'nao_operacional',
+    rotulo: 'Fora do resultado',
+    ajuda: 'Não entra na DRE: transferências entre contas, aportes, distribuição de lucros',
+  },
+];
+
 export interface Categoria {
   id: number;
   entidade_id: number;
   nome: string;
-  grupo_dre: string;
+  grupo_dre: GrupoDRE;
+  ativo: boolean;
+  qtd_lancamentos: number;
+  qtd_titulos: number;
 }
 
 export interface Conta {

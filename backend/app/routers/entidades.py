@@ -14,9 +14,11 @@ from app.models import (
     RegraCategorizacao,
     TipoEntidade,
     Segmento,
+    Titulo,
     Transacao,
 )
 from app.schemas import (
+    CategoriaAtualizar,
     CategoriaCriar,
     CategoriaLer,
     CentroCustoCriar,
@@ -104,20 +106,83 @@ def atualizar(dados: EntidadeAtualizar, entidade: EntidadeDep, db: DB):
     return entidade
 
 
-# --- categorias
+# --- categorias (plano de contas)
+def _uso_categorias(db, entidade_id: int) -> tuple[dict[int, int], dict[int, int]]:
+    lanc = dict(
+        db.execute(
+            select(Transacao.categoria_id, func.count(Transacao.id))
+            .join(ContaFinanceira)
+            .where(ContaFinanceira.entidade_id == entidade_id, Transacao.categoria_id.is_not(None))
+            .group_by(Transacao.categoria_id)
+        ).all()
+    )
+    tit = dict(
+        db.execute(
+            select(Titulo.categoria_id, func.count(Titulo.id))
+            .where(Titulo.entidade_id == entidade_id, Titulo.categoria_id.is_not(None))
+            .group_by(Titulo.categoria_id)
+        ).all()
+    )
+    return lanc, tit
+
+
+def _ler_categoria(c: Categoria, lanc: dict, tit: dict) -> CategoriaLer:
+    return CategoriaLer.model_validate(c).model_copy(
+        update={"qtd_lancamentos": lanc.get(c.id, 0), "qtd_titulos": tit.get(c.id, 0)}
+    )
+
+
+def _nome_livre(db, entidade_id: int, nome: str, ignorar_id: int | None = None) -> str:
+    nome = " ".join(nome.split())
+    existente = db.scalar(
+        select(Categoria).where(Categoria.entidade_id == entidade_id, func.lower(Categoria.nome) == nome.lower())
+    )
+    if existente and existente.id != ignorar_id:
+        raise HTTPException(409, f"Já existe a categoria '{existente.nome}'")
+    return nome
+
+
 @router.get("/{entidade_id}/categorias", response_model=list[CategoriaLer])
 def listar_categorias(entidade: EntidadeDep, db: DB):
-    return db.scalars(
+    lanc, tit = _uso_categorias(db, entidade.id)
+    cats = db.scalars(
         select(Categoria).where(Categoria.entidade_id == entidade.id).order_by(Categoria.grupo_dre, Categoria.nome)
     ).all()
+    return [_ler_categoria(c, lanc, tit) for c in cats]
 
 
 @router.post("/{entidade_id}/categorias", response_model=CategoriaLer, status_code=201)
 def criar_categoria(dados: CategoriaCriar, entidade: EntidadeDep, db: DB):
-    cat = Categoria(entidade_id=entidade.id, **dados.model_dump())
+    cat = Categoria(entidade_id=entidade.id, nome=_nome_livre(db, entidade.id, dados.nome), grupo_dre=dados.grupo_dre)
     db.add(cat)
     db.commit()
-    return cat
+    return _ler_categoria(cat, {}, {})
+
+
+@router.patch("/{entidade_id}/categorias/{categoria_id}", response_model=CategoriaLer)
+def atualizar_categoria(categoria_id: int, dados: CategoriaAtualizar, entidade: EntidadeDep, db: DB):
+    """Renomear, mudar o grupo da DRE (afeta relatórios, inclusive de meses anteriores) ou ativar/desativar."""
+    cat = obter_do_escopo(db, Categoria, categoria_id, entidade.id)
+    valores = dados.model_dump(exclude_unset=True)
+    if valores.get("nome"):
+        valores["nome"] = _nome_livre(db, entidade.id, valores["nome"], cat.id)
+    for k, v in valores.items():
+        if v is not None:
+            setattr(cat, k, v)
+    db.commit()
+    lanc, tit = _uso_categorias(db, entidade.id)
+    return _ler_categoria(cat, lanc, tit)
+
+
+@router.delete("/{entidade_id}/categorias/{categoria_id}", status_code=204)
+def remover_categoria(categoria_id: int, entidade: EntidadeDep, db: DB):
+    """Só remove categoria sem uso; com uso, desative (preserva o histórico)."""
+    cat = obter_do_escopo(db, Categoria, categoria_id, entidade.id)
+    lanc, tit = _uso_categorias(db, entidade.id)
+    if lanc.get(cat.id) or tit.get(cat.id):
+        raise HTTPException(409, "Categoria em uso: desative em vez de excluir, para manter o histórico")
+    db.delete(cat)
+    db.commit()
 
 
 # --- centros de custo

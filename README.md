@@ -5,7 +5,7 @@ Backend em **Python (FastAPI)** e frontend em **Angular**. A arquitetura complet
 
 ## Fase 1 (atual)
 
-- Entidades (PJ/PF) com plano de contas padrão por segmento e **preenchimento automático pelo CNPJ** (BrasilAPI, com CNPJá como reserva)
+- Entidades (PJ/PF) com plano de contas padrão por segmento, editável na tela **Plano de contas** (criar, renomear, mudar grupo da DRE, desativar) e **preenchimento automático pelo CNPJ** (BrasilAPI, com CNPJá como reserva)
 - Contas financeiras (corrente, cartão, caixa, maquininha) com saldo
 - Contas a pagar e a receber, com parcelamento, baixa manual, cancelamento e estorno de baixa
 - Importação de **OFX** (SGML 1.x e XML 2.x, cp1252/UTF-8, vírgula decimal), sem duplicar ao reimportar

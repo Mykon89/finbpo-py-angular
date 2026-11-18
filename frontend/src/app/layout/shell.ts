@@ -28,6 +28,7 @@ import { SEGMENTOS } from '../core/models';
         <a routerLink="/importar" routerLinkActive="ativo">Contas e extratos</a>
         <a routerLink="/lancamentos" routerLinkActive="ativo">Lançamentos</a>
         <a routerLink="/conciliacao" routerLinkActive="ativo">Conciliação</a>
+        <a routerLink="/plano-contas" routerLinkActive="ativo">Plano de contas</a>
         <a routerLink="/entidades" routerLinkActive="ativo">Entidades</a>
       </nav>
       <button class="sair" type="button" (click)="auth.sair()">Sair</button>

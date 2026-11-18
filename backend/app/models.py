@@ -136,6 +136,7 @@ class Categoria(Base):
     entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
     nome: Mapped[str] = mapped_column(String(120))
     grupo_dre: Mapped[GrupoDRE] = mapped_column(_enum(GrupoDRE))
+    ativo: Mapped[bool] = mapped_column(default=True, server_default="true")  # inativa some das listas de escolha
 
 
 class CentroCusto(Base):

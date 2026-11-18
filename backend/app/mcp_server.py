@@ -62,7 +62,9 @@ def listar_categorias(entidade_id: int) -> list[dict]:
         return [
             {"id": c.id, "nome": c.nome, "grupo_dre": c.grupo_dre.value}
             for c in db.scalars(
-                select(Categoria).where(Categoria.entidade_id == entidade_id).order_by(Categoria.grupo_dre, Categoria.nome)
+                select(Categoria)
+                .where(Categoria.entidade_id == entidade_id, Categoria.ativo.is_(True))
+                .order_by(Categoria.grupo_dre, Categoria.nome)
             )
         ]
 
@@ -115,7 +117,7 @@ class ItemCategoria(BaseModel):
 def categorizar_lancamentos(entidade_id: int, itens: list[ItemCategoria]) -> dict:
     """Grava a categoria de vários lançamentos de uma vez. Ficam marcados com origem 'ia' para revisão."""
     with abrir_sessao() as db:
-        cats = set(db.scalars(select(Categoria.id).where(Categoria.entidade_id == entidade_id)))
+        cats = set(db.scalars(select(Categoria.id).where(Categoria.entidade_id == entidade_id, Categoria.ativo.is_(True))))
         ok, erros = 0, []
         for item in itens:
             trn = db.get(Transacao, item.transacao_id)

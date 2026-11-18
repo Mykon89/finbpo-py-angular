@@ -54,6 +54,19 @@ export class Api {
   categorias(eid: number) {
     return this.http.get<Categoria[]>(`${this.e(eid)}/categorias`);
   }
+  criarCategoria(eid: number, dados: { nome: string; grupo_dre: string }) {
+    return this.http.post<Categoria>(`${this.e(eid)}/categorias`, dados);
+  }
+  atualizarCategoria(
+    eid: number,
+    id: number,
+    dados: Partial<Pick<Categoria, 'nome' | 'grupo_dre' | 'ativo'>>,
+  ) {
+    return this.http.patch<Categoria>(`${this.e(eid)}/categorias/${id}`, dados);
+  }
+  removerCategoria(eid: number, id: number) {
+    return this.http.delete<void>(`${this.e(eid)}/categorias/${id}`);
+  }
 
   // contas
   contas(eid: number) {

@@ -45,7 +45,9 @@ import { Categoria, StatusTitulo, TipoTitulo, Titulo } from '../core/models';
           <select name="categoria" [(ngModel)]="novo.categoria_id">
             <option [ngValue]="null">—</option>
             @for (c of categorias(); track c.id) {
-              <option [ngValue]="c.id">{{ c.nome }}</option>
+              @if (c.ativo) {
+                <option [ngValue]="c.id">{{ c.nome }}</option>
+              }
             }
           </select>
         </label>

@@ -72,7 +72,7 @@ def listar(
 def atualizar(transacao_id: int, dados: TransacaoAtualizar, entidade: EntidadeDep, db: DB):
     trn = obter_do_escopo(db, Transacao, transacao_id, entidade.id)
     if dados.categoria_id is not None:
-        obter_do_escopo(db, Categoria, dados.categoria_id, entidade.id)
+        _categoria_ativa(db, dados.categoria_id, entidade.id)
     trn.categoria_id = dados.categoria_id
     trn.categoria_origem = "manual" if dados.categoria_id else None
     if dados.criar_regra and dados.categoria_id:
@@ -81,6 +81,13 @@ def atualizar(transacao_id: int, dados: TransacaoAtualizar, entidade: EntidadeDe
         aplicar_regras(db, entidade.id)  # aplica a nova regra aos demais pendentes
     db.commit()
     return trn
+
+
+def _categoria_ativa(db, categoria_id: int, entidade_id: int) -> Categoria:
+    cat = obter_do_escopo(db, Categoria, categoria_id, entidade_id)
+    if not cat.ativo:
+        raise HTTPException(422, f"A categoria '{cat.nome}' está desativada")
+    return cat
 
 
 @router.get("/categorizacao/sugestoes", response_model=list[SugestaoLer])
@@ -99,7 +106,7 @@ def categorizar_lote(db, entidade_id: int, itens, origem: str) -> int:
     alteradas = 0
     for item in itens:
         trn = obter_do_escopo(db, Transacao, item.transacao_id, entidade_id)
-        obter_do_escopo(db, Categoria, item.categoria_id, entidade_id)
+        _categoria_ativa(db, item.categoria_id, entidade_id)
         trn.categoria_id = item.categoria_id
         trn.categoria_origem = origem
         if item.criar_regra:

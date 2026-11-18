@@ -92,8 +92,14 @@ class EntidadeLer(ORM, EntidadeCampos):
 
 # --- cadastros
 class CategoriaCriar(BaseModel):
-    nome: str
+    nome: str = Field(min_length=2, max_length=120)
     grupo_dre: GrupoDRE
+
+
+class CategoriaAtualizar(BaseModel):
+    nome: str | None = Field(None, min_length=2, max_length=120)
+    grupo_dre: GrupoDRE | None = None
+    ativo: bool | None = None
 
 
 class CategoriaLer(ORM):
@@ -101,6 +107,9 @@ class CategoriaLer(ORM):
     entidade_id: int
     nome: str
     grupo_dre: GrupoDRE
+    ativo: bool = True
+    qtd_lancamentos: int = 0
+    qtd_titulos: int = 0
 
 
 class ContraparteCriar(BaseModel):
