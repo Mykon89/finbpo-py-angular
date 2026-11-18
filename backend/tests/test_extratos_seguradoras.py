@@ -1,6 +1,7 @@
 """Leitores de extrato de seguradora, com arquivos fictícios no mesmo formato dos reais."""
 
 import io
+from datetime import datetime
 from decimal import Decimal
 
 from openpyxl import Workbook
@@ -157,3 +158,95 @@ def test_importa_com_vinculo_do_historico_e_nao_duplica(client, corretora):
     assert deb["origem"] == "KETTE" and deb["ramo"] == "DEBITO"
     de_novo = client.post(f"/api/entidades/{eid}/extratos-comissao/importar", files=arq[:1]).json()
     assert de_novo[0]["ja_importado"] and de_novo[0]["gravadas"] == 0
+
+
+def _xlsx(linhas) -> bytes:
+    wb = Workbook()
+    ws = wb.active
+    for l in linhas:
+        ws.append(l)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_tokio_xlsx_com_totais():
+    arq = _xlsx([
+        ["Segurado", "Negocio", "Ramo", "Apolice/Bilhete", "Parcela", "Endosso", "Tipo Pagamento", "Premio(R$)", "Comissão(%)", "Comissão(R$)"],
+        ["FULANO", 1, "AUTO", "6583926", "3/12", 0, "COMISSAO ANTECIPADA", 142.72, 22, 91.46],
+        ["BELTRANO", 2, "RESIDENCIAL", "3729374", "1/4", 0, "COMISSAO", 140.14, 15, 8.54],
+        ["Total do Pagamento", None, "100.00"], ["ISS", None, "-4.11"], ["IRRF", None, "0.00"],
+        ["Outros Ajustes sem impostos", None, "0.00"], ["Total Comissão Líquida", None, "95.89"],
+    ])
+    [e] = ler(arq, "TOKIO_EXTRATO_16-11-2026.xlsx")
+    assert (e.codigo, e.bruto, e.iss, e.liquido) == ("TOKIO-16112026", Decimal("100.00"), Decimal("4.11"), Decimal("95.89"))
+    assert not e.divergencias
+    assert [(g.ramo, g.obs) for g in e.grupos] == [("AUTO", "COMISSAO ANTECIPADA"), ("RE", None)]
+
+
+def test_amil_txt_cp1252():
+    txt = (
+        "###Extrato\nOperadora:#AMIL#Filial:#BRASILIA#\nProdutor:#238325 - CORRETORA###CNPJ:#1\n"
+        "Per\xedodo:#x#N\xfamero Extrato:#111#Nota Fiscal:#1376\n#Valor Apurado:#28.45##\n#Valor ISS:#1.13Valor CBS:#0\n"
+        "#Valor para Emiss\xe3o de NF:#28.45##Valor L\xedquido a Receber:#27.32\n"
+        "Forma Pagamento:#Dep\xf3sito#Dt. Pagto Previsto:#06/10/2026#Dt. Pagto Efetivo:#29/10/2026#\n"
+        "Pessoa F\xedsica#95070162 ANA SOUZA#97209789#29/07/2026#VEND#2#50#08/2026#56,89#1#0#Dental#1#Agenciamento#Comiss\xe3o#56,89#14,23#ANA SOUZA#\n"
+        "Pessoa F\xedsica#95070162 ANA SOUZA#97209789#29/07/2026#VEND#3#25#09/2026#56,89#1#0#Dental#1#Agenciamento#Comiss\xe3o#56,89#14,22#ANA SOUZA#\n"
+    )
+    [e] = ler(txt.encode("cp1252"), "AMIL.txt")
+    assert (e.codigo, e.seguradora, str(e.data), e.iss, e.liquido) == ("AMIL-238325-111", "AMIL 238325", "2026-10-29", Decimal("1.13"), Decimal("27.32"))
+    [g] = e.grupos
+    assert (g.apolice, g.ramo, g.bruta, g.parcela_txt) == ("97209789", "ODONTO", Decimal("28.45"), "2 e 3")
+
+
+def test_yelum_zurich_consorcio():
+    yelum = ("Demonstrativo de Corretagem\nDOC nr.;Nr. Demonstrativo;Data de Pagto\n410823;344;09/11/2026\n"
+             "Total Bruto - R$;Desc. de Adiantamento - R$;Total Liquido - R$;IR - R$;ISS - R$;INSS - R$;Valor Liquido Pago - R$\n"
+             "31,82; 0,00;31,82;0,00;1,26;0,00;30,56\n"
+             "Marca;Segurado;Apolice;Endosso / Fatura;Parcela;Lancamento;Premio;% Comissao;Valor Comissao\n"
+             "YELUM;ELIANE;310920260926429;0;'01/12;PAGAMENTO;159,32;10,00;15,91\n"
+             "YELUM;ELIANE;310920260926429;0;'02/12;ANTECIPACAO;159,29;10,00;15,91\n")
+    [y] = ler(yelum.encode(), "YELUM.csv")
+    assert y.codigo == "YELUM-09112026" and y.iss == Decimal("1.26") and not y.divergencias
+    [g] = y.grupos
+    assert (g.ramo, g.ramo_padrao, g.parcela_txt, g.obs) == ("?", "AUTO", "1 a 2/12", "COMISSAO ANTECIPADA")
+
+    zur = _xlsx([["Data", "Seguradora", "Ramo", "Cliente", "Comissão bruta", "Imposto", "Líquido"],
+                 [datetime(2026, 9, 1), "ZURICH", "Automóvel", "FULANA", 111.06, 11.22, 99.84],
+                 [datetime(2026, 9, 24), "ZURICH", "Automóvel", "FULANA", -45.27, 0, -45.27]])
+    [z] = ler(zur, "ZURICH.xlsx")
+    assert z.codigo == "ZURICH-24092026" and z.bruto == Decimal("54.57") and all(g.sem_imposto for g in z.grupos)
+
+    cons = """Extrato da Ordem de Pagamento
+Valores da OP
+101119146 19/10/2026 R$ 562,50 R$ 0,00 R$ 0,00 R$ 0,00 R$ 0,00 R$ 562,50
+JEANNE SILVA Imovel 24/08/2026 24/08/2026 R$ 300.000,00 2,500% R$ 562,50 2/12 COMISSAO
+NOGUEIRA Nº contrato SOBRE VENDA
+1000037622|I0573 DE CONSORCIO
+|707"""
+    from app.services.extratos_seguradoras import ler_porto_consorcio
+
+    [c] = ler_porto_consorcio(cons)
+    [g] = c.grupos
+    assert c.codigo == "PORTO-101119146" and g.apolice == "I0573/707" and g.ramo == "CONSORCIO"
+    assert g.cliente == "I0573/707 - 2ª - JEANNE SILVA NOGUEIRA" and g.parcela_txt == "2/12"
+
+
+def test_metlife_texto_do_pypdf():
+    from app.services.extratos_seguradoras import ler_metlife
+
+    txt = """Demonstrativo de Comissões
+Data Pagamento: 30/09/2026
+METROPOLITAN LIFE
+790 Vida Segura 91 VIDA INDIVIDUAL
+91.424312
+KELLY ROCHA 22 23 (C) Corretagem 07/2026 4,00 421,29 421,29 16,86
+91.424312
+KELLY ROCHA 23 24 (C) Corretagem 08/2026 4,00 421,29 421,29 16,86
+Sub-Total (Produção) : 33,72
+0,00ISS
+33,72TOTAL"""
+    [m] = ler_metlife(txt)
+    [g] = m.grupos
+    assert m.codigo == "METLIFE-30092026" and m.liquido == Decimal("33.72") and not m.divergencias
+    assert (g.apolice, g.ramo, g.bruta, g.parcela_txt) == ("91.424312", "VIDA", Decimal("33.72"), "23 e 24")

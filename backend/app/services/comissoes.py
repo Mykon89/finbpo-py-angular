@@ -35,6 +35,8 @@ class ResultadoExtrato:
 
 _FORA = {"LTDA", "ME", "EPP", "EIRELI", "SA", "S", "A", "DE", "DA", "DO", "DOS", "DAS", "E", "EM"}
 PRODUTORES_VALIDOS = re.compile(r"^(FABIANA|GIOVANNA)\b", re.I)
+REGEX_BONIFICACAO = re.compile(r"^(PAGTO PROG|BONIFIC|PREMIA|PROGRAMA DE)", re.I)
+PARCEIRO_COCORRETAGEM = "TRUST CCC"
 CLIENTES_SOMADOS = [re.compile(r"AMMO BURG"), re.compile(r"^ADECON\b")]  # uma linha só por extrato
 
 
@@ -183,8 +185,19 @@ def gravar(db: Session, entidade_id: int, extratos: list[Extrato], arquivo: str)
         ext.documento, ext.bruto, ext.iss, ext.liquido, ext.debitos = e.documento or None, e.bruto, e.iss, e.liquido, e.debitos
         ext.arquivo = arquivo[:255]
         db.flush()
-        for n, g in enumerate(consolidar(e.grupos), 1):
+        grupos = consolidar(e.grupos)
+        # negativo e positivo da mesma apólice/parcela no mesmo extrato = cocorretagem (regra do script)
+        em_par = set()
+        for i, a in enumerate(grupos):
+            for j, b in enumerate(grupos):
+                if a.bruta < 0 < b.bruta and a.apolice and a.apolice == b.apolice and parcela_texto(e, a) == parcela_texto(e, b):
+                    em_par |= {i, j}
+        for n, g in enumerate(grupos, 1):
             obs = [g.obs] if g.obs else []
+            if REGEX_BONIFICACAO.search(g.cliente or "") and not g.debito:
+                g.ramo = "BONIFICACAO"
+            if g.ramo in ("VIAGEM", "BONIFICACAO") and not g.origem_fixa:
+                g.origem_fixa = "KETTE"  # viagem e bonificação: sempre Kette, sem produtora/parceiro
             if g.origem_fixa:
                 origem, produtor, parceiro = g.origem_fixa, None, None
             else:
@@ -209,13 +222,17 @@ def gravar(db: Session, entidade_id: int, extratos: list[Extrato], arquivo: str)
                 if produtor and not produtor_valido(produtor) and not parceiro and produtor not in ("KETTE", "ISADORA"):
                     parceiro = produtor  # quem não é produtora vira parceiro (regra do script)
                 produtor = produtor_valido(produtor)
+                if n - 1 in em_par:
+                    parceiro = PARCEIRO_COCORRETAGEM
+            if g.ramo == "?" and g.ramo_padrao:
+                g.ramo = g.ramo_padrao
             if g.ramo == "?":
                 obs.insert(0, "VERIFICAR RAMO")
-            if g.bruta < 0 and not g.debito and not g.obs:
+            if g.bruta < 0 and not g.debito and not g.obs and n - 1 not in em_par:
                 obs.append("NEGATIVO: verificar o motivo (estorno/ajuste)")
             ptxt = parcela_texto(e, g)
             pnum = next((int(x) for x in re.findall(r"\d+", ptxt)), None) if ptxt else None
-            imp = Decimal("0") if g.debito else _imposto(g.bruta)
+            imp = Decimal("0") if g.debito or g.sem_imposto else _imposto(g.bruta)
             db.add(
                 Comissao(
                     entidade_id=entidade_id,
