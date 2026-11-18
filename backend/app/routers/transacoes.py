@@ -1,12 +1,15 @@
 from datetime import date
+from decimal import Decimal
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 from sqlalchemy import select
 
 from app.deps import DB, EntidadeDep, obter_do_escopo
 from app.models import (
     Categoria,
     ContaFinanceira,
+    Entidade,
     Importacao,
     OrigemTransacao,
     RegraCategorizacao,
@@ -16,7 +19,9 @@ from app.models import (
     Transacao,
 )
 from app.schemas import (
+    AnaliseOFX,
     ConciliacaoResultado,
+    ContaLer,
     ImportacaoResultado,
     TituloLer,
     TransacaoAtualizar,
@@ -25,7 +30,9 @@ from app.schemas import (
 )
 from app.services.categorizacao import aplicar_regras
 from app.services.conciliacao import candidatos, conciliar_entidade, vincular
-from app.services.ofx import OFXInvalido, ler_ofx
+from app.services.bancos import nome_banco, normalizar_codigo
+from app.services.cnpj import so_digitos
+from app.services.ofx import ExtratoOFX, OFXInvalido, ler_ofx
 
 router = APIRouter(prefix="/entidades/{entidade_id}", tags=["transacoes"])
 
@@ -78,27 +85,64 @@ def ignorar(transacao_id: int, entidade: EntidadeDep, db: DB):
     return trn
 
 
-@router.post("/contas/{conta_id}/importar-ofx", response_model=ImportacaoResultado)
-async def importar_ofx(conta_id: int, arquivo: UploadFile, entidade: EntidadeDep, db: DB):
-    conta = obter_do_escopo(db, ContaFinanceira, conta_id, entidade.id)
+async def _ler_arquivo(arquivo: UploadFile) -> ExtratoOFX:
     conteudo = await arquivo.read(TAMANHO_MAXIMO + 1)
     if len(conteudo) > TAMANHO_MAXIMO:
         raise HTTPException(413, "Arquivo maior que 10 MB")
     try:
-        extrato = ler_ofx(conteudo)
+        return ler_ofx(conteudo)
     except OFXInvalido as e:
         raise HTTPException(422, str(e))
 
-    if extrato.conta_id and conta.numero and _so_digitos(extrato.conta_id) != _so_digitos(conta.numero):
-        raise HTTPException(
-            422, f"O OFX é da conta {extrato.conta_id}, mas a conta selecionada é {conta.numero}"
-        )
+
+def _num(s: str | None) -> str:
+    return so_digitos(s or "").lstrip("0")
+
+
+def _mesma_conta(conta: ContaFinanceira, extrato: ExtratoOFX) -> bool:
+    if not extrato.conta_id or _num(conta.numero) != _num(extrato.conta_id):
+        return False
+    banco = normalizar_codigo(extrato.banco_id)
+    return not (banco and conta.banco_codigo and normalizar_codigo(conta.banco_codigo) != banco)
+
+
+def _contas_do_extrato(db, extrato: ExtratoOFX) -> list[ContaFinanceira]:
+    if not extrato.conta_id:
+        return []
+    return [c for c in db.scalars(select(ContaFinanceira).where(ContaFinanceira.numero.is_not(None))) if _mesma_conta(c, extrato)]
+
+
+def _sugestao(extrato: ExtratoOFX) -> tuple[TipoConta, str, Decimal]:
+    tipo = TipoConta.CARTAO if extrato.cartao else TipoConta.CORRENTE
+    banco = nome_banco(extrato.banco_id) or extrato.instituicao or "Banco"
+    numero = extrato.conta_id or ""
+    if tipo == TipoConta.CARTAO:
+        nome = f"Cartão {banco} final {_num(numero)[-4:]}" if numero else f"Cartão {banco}"
+    else:
+        partes = [banco]
+        if extrato.agencia:
+            partes.append(f"Ag {extrato.agencia}")
+        if numero:
+            partes.append(f"C/C {numero}")
+        nome = " ".join(partes)
+    # Saldo antes do 1º lançamento do arquivo, para o saldo do sistema bater com o do banco
+    saldo_inicial = Decimal("0")
+    if extrato.saldo is not None:
+        saldo_inicial = extrato.saldo - sum((t.valor for t in extrato.transacoes), Decimal("0"))
+    return tipo, nome[:120], saldo_inicial
+
+
+def _gravar(db, entidade_id: int, conta: ContaFinanceira, extrato: ExtratoOFX, arquivo: str) -> ImportacaoResultado:
+    if extrato.conta_id and conta.numero and _num(extrato.conta_id) != _num(conta.numero):
+        raise HTTPException(422, f"O OFX é da conta {extrato.conta_id}, mas a conta selecionada é {conta.numero}")
     if extrato.cartao and conta.tipo != TipoConta.CARTAO:
         raise HTTPException(422, "O OFX é de cartão de crédito; selecione uma conta do tipo cartão")
     if not conta.numero and extrato.conta_id:
         conta.numero = extrato.conta_id
-    if not conta.banco_codigo and extrato.banco_id:
-        conta.banco_codigo = extrato.banco_id
+    if not conta.banco_codigo and normalizar_codigo(extrato.banco_id):
+        conta.banco_codigo = normalizar_codigo(extrato.banco_id)
+    if not conta.agencia and extrato.agencia:
+        conta.agencia = extrato.agencia
 
     existentes = set(
         db.scalars(
@@ -107,7 +151,7 @@ async def importar_ofx(conta_id: int, arquivo: UploadFile, entidade: EntidadeDep
             )
         )
     )
-    imp = Importacao(conta_id=conta.id, arquivo=arquivo.filename or "extrato.ofx", origem=OrigemTransacao.OFX)
+    imp = Importacao(conta_id=conta.id, arquivo=arquivo, origem=OrigemTransacao.OFX)
     db.add(imp)
     db.flush()
     novas = 0
@@ -132,10 +176,12 @@ async def importar_ofx(conta_id: int, arquivo: UploadFile, entidade: EntidadeDep
     imp.total_novas = novas
     db.commit()
 
-    categorizadas = aplicar_regras(db, entidade.id)
-    conc = conciliar_entidade(db, entidade.id)
+    categorizadas = aplicar_regras(db, entidade_id)
+    conc = conciliar_entidade(db, entidade_id)
     return ImportacaoResultado(
         importacao_id=imp.id,
+        conta_id=conta.id,
+        conta_nome=conta.nome,
         total_lidas=imp.total_lidas,
         total_novas=novas,
         duplicadas=imp.total_lidas - novas,
@@ -145,8 +191,73 @@ async def importar_ofx(conta_id: int, arquivo: UploadFile, entidade: EntidadeDep
     )
 
 
-def _so_digitos(s: str) -> str:
-    return "".join(c for c in s if c.isdigit()).lstrip("0")
+@router.post("/contas/{conta_id}/importar-ofx", response_model=ImportacaoResultado)
+async def importar_ofx(conta_id: int, arquivo: UploadFile, entidade: EntidadeDep, db: DB):
+    conta = obter_do_escopo(db, ContaFinanceira, conta_id, entidade.id)
+    extrato = await _ler_arquivo(arquivo)
+    return _gravar(db, entidade.id, conta, extrato, arquivo.filename or "extrato.ofx")
+
+
+@router.post("/ofx/analisar", response_model=AnaliseOFX)
+async def analisar_ofx(arquivo: UploadFile, entidade: EntidadeDep, db: DB):
+    """Lê o OFX sem gravar: identifica banco e conta e diz se a conta já existe."""
+    extrato = await _ler_arquivo(arquivo)
+    tipo, nome, saldo_inicial = _sugestao(extrato)
+    contas = _contas_do_extrato(db, extrato)
+    desta = next((c for c in contas if c.entidade_id == entidade.id), None)
+    outra = next((c for c in contas if c.entidade_id != entidade.id), None)
+    datas = [t.data for t in extrato.transacoes]
+    return AnaliseOFX(
+        banco_codigo=normalizar_codigo(extrato.banco_id),
+        banco_nome=nome_banco(extrato.banco_id) or extrato.instituicao,
+        agencia=extrato.agencia,
+        numero=extrato.conta_id,
+        tipo=tipo,
+        inicio=extrato.inicio or (min(datas) if datas else None),
+        fim=extrato.fim or (max(datas) if datas else None),
+        total_transacoes=len(extrato.transacoes),
+        saldo_extrato=extrato.saldo,
+        data_saldo=extrato.data_saldo,
+        conta_existente=ContaLer.model_validate(desta) if desta else None,
+        outra_entidade=db.get(Entidade, outra.entidade_id).nome if outra and not desta else None,
+        sugestao_nome=nome,
+        sugestao_saldo_inicial=saldo_inicial,
+    )
+
+
+@router.post("/ofx/importar", response_model=ImportacaoResultado)
+async def importar_ofx_auto(
+    arquivo: UploadFile,
+    entidade: EntidadeDep,
+    db: DB,
+    conta_id: Annotated[int | None, Form()] = None,
+    nome: Annotated[str | None, Form(max_length=120)] = None,
+    saldo_inicial: Annotated[Decimal | None, Form()] = None,
+):
+    """Importa o OFX na conta informada, na conta já reconhecida pelo número ou numa conta nova."""
+    extrato = await _ler_arquivo(arquivo)
+    if conta_id:
+        conta = obter_do_escopo(db, ContaFinanceira, conta_id, entidade.id)
+    else:
+        conta = next((c for c in _contas_do_extrato(db, extrato) if c.entidade_id == entidade.id), None)
+        if conta is None:
+            if not extrato.conta_id:
+                raise HTTPException(422, "O OFX não informa o número da conta; escolha a conta manualmente")
+            tipo, sugestao, saldo = _sugestao(extrato)
+            conta = ContaFinanceira(
+                entidade_id=entidade.id,
+                tipo=tipo,
+                nome=(nome or "").strip() or sugestao,
+                banco_codigo=normalizar_codigo(extrato.banco_id),
+                agencia=extrato.agencia,
+                numero=extrato.conta_id,
+                saldo_inicial=saldo if saldo_inicial is None else saldo_inicial,
+            )
+            db.add(conta)
+            db.flush()
+            resultado = _gravar(db, entidade.id, conta, extrato, arquivo.filename or "extrato.ofx")
+            return resultado.model_copy(update={"conta_criada": True})
+    return _gravar(db, entidade.id, conta, extrato, arquivo.filename or "extrato.ofx")
 
 
 @router.post("/conciliacao/automatica", response_model=ConciliacaoResultado)

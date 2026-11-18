@@ -107,12 +107,32 @@ export interface Transacao {
 
 export interface ImportacaoResultado {
   importacao_id: number;
+  conta_id: number;
+  conta_nome: string;
+  conta_criada: boolean;
   total_lidas: number;
   total_novas: number;
   duplicadas: number;
   categorizadas: number;
   conciliadas: number;
   saldo_extrato: string | null;
+}
+
+export interface AnaliseOFX {
+  banco_codigo: string | null;
+  banco_nome: string | null;
+  agencia: string | null;
+  numero: string | null;
+  tipo: TipoConta;
+  inicio: string | null;
+  fim: string | null;
+  total_transacoes: number;
+  saldo_extrato: string | null;
+  data_saldo: string | null;
+  conta_existente: Omit<Conta, 'saldo_atual'> | null;
+  outra_entidade: string | null;
+  sugestao_nome: string;
+  sugestao_saldo_inicial: string;
 }
 
 export interface LinhaDRE {

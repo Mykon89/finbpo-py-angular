@@ -3,94 +3,192 @@ import { FormsModule } from '@angular/forms';
 import { Api } from '../core/api';
 import { mensagemErro } from '../core/auth';
 import { EntidadeAtual } from '../core/entidade-atual';
-import { BrlPipe } from '../core/formato';
-import { Conta, ImportacaoResultado, TipoConta } from '../core/models';
+import { BrlPipe, DataBrPipe } from '../core/formato';
+import { AnaliseOFX, Conta, ImportacaoResultado, TipoConta } from '../core/models';
+
+const TIPOS: [TipoConta, string][] = [
+  ['corrente', 'Conta corrente'],
+  ['poupanca', 'Poupança'],
+  ['cartao', 'Cartão de crédito'],
+  ['caixa', 'Caixa'],
+  ['maquininha', 'Maquininha'],
+];
 
 @Component({
   selector: 'app-importar',
-  imports: [FormsModule, BrlPipe],
+  imports: [FormsModule, BrlPipe, DataBrPipe],
   template: `
     <header class="cabecalho"><h1>Contas e extratos</h1></header>
 
-    <div class="duas-colunas">
-      <section class="cartao">
-        <h2>Importar OFX</h2>
-        <label
-          >Conta
-          <select [(ngModel)]="contaId" name="conta">
-            @for (c of contas(); track c.id) {
-              <option [ngValue]="c.id">{{ c.nome }}</option>
-            }
-          </select>
-        </label>
-        <label
-          class="soltar"
-          [class.sobre]="arrastando()"
-          (dragover)="$event.preventDefault(); arrastando.set(true)"
-          (dragleave)="arrastando.set(false)"
-          (drop)="soltar($event)"
-        >
-          <input type="file" accept=".ofx,.OFX" (change)="escolher($event)" hidden />
-          {{ arquivo()?.name ?? 'Arraste o arquivo .ofx aqui ou clique para escolher' }}
-        </label>
-        <button
-          class="primario"
-          type="button"
-          [disabled]="!arquivo() || !contaId || enviando()"
-          (click)="enviar()"
-        >
-          {{ enviando() ? 'Importando…' : 'Importar' }}
-        </button>
-        @if (erro()) {
-          <p class="erro">{{ erro() }}</p>
+    <section class="cartao bloco">
+      <h2>Importar extrato OFX</h2>
+      <label
+        class="soltar"
+        [class.sobre]="arrastando()"
+        (dragover)="$event.preventDefault(); arrastando.set(true)"
+        (dragleave)="arrastando.set(false)"
+        (drop)="soltar($event)"
+      >
+        <input type="file" accept=".ofx,.OFX" (change)="escolher($event)" hidden />
+        @if (arquivo(); as a) {
+          <strong>{{ a.name }}</strong> · clique para trocar
+        } @else {
+          Arraste o arquivo .ofx aqui ou clique para escolher
         }
-        @if (resultado(); as r) {
-          <ul class="resultado">
-            <li>
-              Lidas: <strong>{{ r.total_lidas }}</strong>
-            </li>
-            <li>
-              Novas: <strong>{{ r.total_novas }}</strong> · Duplicadas ignoradas: {{ r.duplicadas }}
-            </li>
-            <li>Categorizadas por regra: {{ r.categorizadas }}</li>
-            <li>Conciliadas automaticamente: {{ r.conciliadas }}</li>
-            @if (r.saldo_extrato) {
-              <li>Saldo informado no extrato: {{ r.saldo_extrato | brl }}</li>
-            }
-          </ul>
-        }
-      </section>
+      </label>
+      @if (analisando()) {
+        <p class="sutil">Lendo o arquivo…</p>
+      }
+      @if (erro()) {
+        <p class="erro">{{ erro() }}</p>
+      }
 
-      <section class="cartao">
-        <h2>Nova conta</h2>
-        <form class="formulario" (ngSubmit)="criarConta()">
-          <label
-            >Nome <input name="nome" [(ngModel)]="nova.nome" required placeholder="Ex.: Itaú PJ"
-          /></label>
-          <label
-            >Tipo
-            <select name="tipo" [(ngModel)]="nova.tipo">
-              @for (t of tipos; track t[0]) {
-                <option [ngValue]="t[0]">{{ t[1] }}</option>
+      @if (analise(); as a) {
+        <div class="analise">
+          <dl>
+            <div>
+              <dt>Banco</dt>
+              <dd>
+                {{ a.banco_nome ?? 'Não identificado'
+                }}{{ a.banco_codigo ? ' (' + a.banco_codigo + ')' : '' }}
+              </dd>
+            </div>
+            @if (a.agencia) {
+              <div>
+                <dt>Agência</dt>
+                <dd>{{ a.agencia }}</dd>
+              </div>
+            }
+            <div>
+              <dt>{{ a.tipo === 'cartao' ? 'Cartão' : 'Conta' }}</dt>
+              <dd>{{ a.numero ?? '—' }}</dd>
+            </div>
+            <div>
+              <dt>Período</dt>
+              <dd>{{ a.inicio | dataBr }} a {{ a.fim | dataBr }}</dd>
+            </div>
+            <div>
+              <dt>Lançamentos</dt>
+              <dd>{{ a.total_transacoes }}</dd>
+            </div>
+            @if (a.saldo_extrato !== null) {
+              <div>
+                <dt>Saldo no extrato</dt>
+                <dd>{{ a.saldo_extrato | brl }}</dd>
+              </div>
+            }
+          </dl>
+
+          @if (a.outra_entidade) {
+            <p class="aviso erro">
+              Esta conta já está cadastrada na entidade <strong>{{ a.outra_entidade }}</strong>.
+              Confira se a entidade selecionada no menu é a certa antes de importar.
+            </p>
+          }
+
+          @if (a.conta_existente && !escolherOutra()) {
+            <p class="aviso ok">
+              Conta reconhecida: <strong>{{ a.conta_existente.nome }}</strong>. Lançamentos já
+              importados antes são ignorados.
+            </p>
+            <div class="acoes">
+              <button class="primario" type="button" [disabled]="importando()" (click)="importar()">
+                {{ importando() ? 'Importando…' : 'Importar' }}
+              </button>
+              <button class="link" type="button" (click)="escolherOutra.set(true)">
+                Importar em outra conta
+              </button>
+            </div>
+          } @else {
+            <div class="opcoes" role="radiogroup" aria-label="Destino do extrato">
+              @if (a.numero) {
+                <label class="opcao"
+                  ><input type="radio" name="destino" [value]="'nova'" [(ngModel)]="destino" />
+                  Criar nova conta com os dados do extrato</label
+                >
               }
-            </select>
-          </label>
-          <label
-            >Banco (código) <input name="banco" [(ngModel)]="nova.banco_codigo" placeholder="341"
-          /></label>
-          <label>Agência <input name="agencia" [(ngModel)]="nova.agencia" /></label>
-          <label
-            >Conta
-            <input name="numero" [(ngModel)]="nova.numero" placeholder="Igual ao ACCTID do OFX"
-          /></label>
-          <label
-            >Saldo inicial
-            <input name="saldo" type="number" step="0.01" [(ngModel)]="nova.saldo_inicial"
-          /></label>
-          <button class="primario" type="submit">Adicionar</button>
-        </form>
-      </section>
-    </div>
+              @if (contas().length) {
+                <label class="opcao"
+                  ><input type="radio" name="destino" [value]="'existente'" [(ngModel)]="destino" />
+                  Usar uma conta já cadastrada</label
+                >
+              }
+            </div>
+
+            @if (destino === 'nova' && a.numero) {
+              <div class="grade">
+                <label class="largo"
+                  >Nome da conta <input name="nome" [(ngModel)]="nomeNova"
+                /></label>
+                <label>
+                  Saldo inicial
+                  <input name="saldoInicial" type="number" step="0.01" [(ngModel)]="saldoNova" />
+                </label>
+              </div>
+              @if (a.saldo_extrato !== null) {
+                <p class="sutil pequeno">
+                  Saldo inicial calculado para que o saldo no sistema fique igual ao do extrato ({{
+                    a.saldo_extrato | brl
+                  }}).
+                </p>
+              }
+            } @else if (destino === 'existente') {
+              <label
+                >Conta
+                <select name="conta" [(ngModel)]="contaEscolhida">
+                  @for (c of contas(); track c.id) {
+                    <option [ngValue]="c.id">{{ c.nome }}</option>
+                  }
+                </select>
+              </label>
+            }
+            <div class="acoes">
+              <button
+                class="primario"
+                type="button"
+                [disabled]="importando() || (destino === 'existente' && !contaEscolhida)"
+                (click)="importar()"
+              >
+                {{
+                  importando()
+                    ? 'Importando…'
+                    : destino === 'nova'
+                      ? 'Criar conta e importar'
+                      : 'Importar'
+                }}
+              </button>
+              @if (a.conta_existente) {
+                <button class="link" type="button" (click)="escolherOutra.set(false)">
+                  Voltar
+                </button>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      @if (resultado(); as r) {
+        <div class="aviso ok resultado">
+          <strong>{{
+            r.conta_criada
+              ? 'Conta "' + r.conta_nome + '" criada e extrato importado.'
+              : 'Extrato importado em "' + r.conta_nome + '".'
+          }}</strong>
+          <ul>
+            <li>
+              Novos lançamentos: <strong>{{ r.total_novas }}</strong> de {{ r.total_lidas }} ({{
+                r.duplicadas
+              }}
+              já existiam)
+            </li>
+            <li>
+              Categorizados por regra: {{ r.categorizadas }} · Conciliados automaticamente:
+              {{ r.conciliadas }}
+            </li>
+          </ul>
+        </div>
+      }
+    </section>
 
     <section class="cartao sem-padding">
       <table>
@@ -99,6 +197,7 @@ import { Conta, ImportacaoResultado, TipoConta } from '../core/models';
             <th>Conta</th>
             <th>Tipo</th>
             <th>Banco</th>
+            <th>Agência</th>
             <th>Número</th>
             <th class="num">Saldo</th>
           </tr>
@@ -107,37 +206,61 @@ import { Conta, ImportacaoResultado, TipoConta } from '../core/models';
           @for (c of contas(); track c.id) {
             <tr>
               <td>{{ c.nome }}</td>
-              <td>{{ c.tipo }}</td>
+              <td>{{ rotuloTipo(c.tipo) }}</td>
               <td>{{ c.banco_codigo ?? '—' }}</td>
+              <td>{{ c.agencia ?? '—' }}</td>
               <td>{{ c.numero ?? '—' }}</td>
-              <td class="num">{{ c.saldo_atual | brl }}</td>
+              <td class="num" [class.neg]="+c.saldo_atual < 0">{{ c.saldo_atual | brl }}</td>
             </tr>
           } @empty {
             <tr>
-              <td colspan="5" class="sutil">Nenhuma conta</td>
+              <td colspan="6" class="sutil">
+                Nenhuma conta ainda. Importe o primeiro extrato acima: a conta é criada
+                automaticamente.
+              </td>
             </tr>
           }
         </tbody>
       </table>
     </section>
+
+    <details class="cartao manual">
+      <summary>Cadastrar conta manualmente (caixa, maquininha ou conta sem OFX)</summary>
+      <form class="grade" (ngSubmit)="criarConta()">
+        <label
+          >Nome
+          <input name="mnome" [(ngModel)]="nova.nome" required placeholder="Ex.: Caixa da clínica"
+        /></label>
+        <label
+          >Tipo
+          <select name="mtipo" [(ngModel)]="nova.tipo">
+            @for (t of tipos; track t[0]) {
+              <option [ngValue]="t[0]">{{ t[1] }}</option>
+            }
+          </select>
+        </label>
+        <label
+          >Banco (código) <input name="mbanco" [(ngModel)]="nova.banco_codigo" placeholder="341"
+        /></label>
+        <label>Agência <input name="magencia" [(ngModel)]="nova.agencia" /></label>
+        <label>Conta <input name="mnumero" [(ngModel)]="nova.numero" /></label>
+        <label
+          >Saldo inicial
+          <input name="msaldo" type="number" step="0.01" [(ngModel)]="nova.saldo_inicial"
+        /></label>
+        <div><button class="primario" type="submit">Adicionar</button></div>
+      </form>
+    </details>
   `,
   styles: `
-    .duas-colunas {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 16px;
-      align-items: start;
-    }
-    .cartao {
+    .bloco {
       display: flex;
       flex-direction: column;
       gap: 12px;
+      margin-bottom: 16px;
     }
-    .formulario {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
+    .bloco h2 {
+      margin: 0;
     }
     .soltar {
       border: 2px dashed var(--borda);
@@ -151,14 +274,87 @@ import { Conta, ImportacaoResultado, TipoConta } from '../core/models';
       border-color: var(--primaria);
       color: var(--texto);
     }
-    .resultado {
+    .analise {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-top: 1px solid var(--borda);
+      padding-top: 12px;
+    }
+    dl {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px 16px;
       margin: 0;
+    }
+    dt {
+      font-size: 0.75rem;
+      color: var(--texto-sutil);
+    }
+    dd {
+      margin: 2px 0 0;
+      font-weight: 600;
+    }
+    .aviso {
+      margin: 0;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: var(--fundo-sutil);
+    }
+    .aviso.erro {
+      color: var(--negativo);
+    }
+    .aviso.ok {
+      border-left: 3px solid var(--primaria);
+    }
+    .opcoes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+    }
+    .opcao {
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      color: var(--texto);
+      font-size: 0.9rem;
+    }
+    .grade {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+    .largo {
+      grid-column: span 2;
+    }
+    .acoes {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .resultado ul {
+      margin: 6px 0 0;
       padding-left: 18px;
     }
-    @media (max-width: 900px) {
-      .duas-colunas,
-      .formulario {
-        grid-template-columns: 1fr;
+    .pequeno {
+      font-size: 0.8rem;
+      margin: 0;
+    }
+    .manual {
+      margin-top: 16px;
+    }
+    .manual summary {
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .manual form {
+      margin-top: 12px;
+    }
+    @media (max-width: 600px) {
+      .largo {
+        grid-column: 1 / -1;
       }
     }
   `,
@@ -166,63 +362,98 @@ import { Conta, ImportacaoResultado, TipoConta } from '../core/models';
 export class Importar {
   private api = inject(Api);
   private ent = inject(EntidadeAtual);
+  tipos = TIPOS;
   contas = signal<Conta[]>([]);
   arquivo = signal<File | null>(null);
-  arrastando = signal(false);
-  enviando = signal(false);
+  analise = signal<AnaliseOFX | null>(null);
   resultado = signal<ImportacaoResultado | null>(null);
+  arrastando = signal(false);
+  analisando = signal(false);
+  importando = signal(false);
+  escolherOutra = signal(false);
   erro = signal('');
-  contaId: number | null = null;
-  tipos: [TipoConta, string][] = [
-    ['corrente', 'Conta corrente'],
-    ['poupanca', 'Poupança'],
-    ['cartao', 'Cartão de crédito'],
-    ['caixa', 'Caixa'],
-    ['maquininha', 'Maquininha'],
-  ];
+  destino: 'nova' | 'existente' = 'nova';
+  nomeNova = '';
+  saldoNova: number | null = null;
+  contaEscolhida: number | null = null;
   nova = this.vazia();
 
   constructor() {
-    effect(() => this.carregar());
+    effect(() => {
+      this.ent.id();
+      this.limpar();
+      this.carregar();
+    });
   }
 
   carregar() {
     const eid = this.ent.id();
     if (!eid) return;
-    this.api.contas(eid).subscribe((c) => {
-      this.contas.set(c);
-      if (!c.some((x) => x.id === this.contaId)) this.contaId = c[0]?.id ?? null;
-    });
+    this.api.contas(eid).subscribe((c) => this.contas.set(c));
+  }
+
+  rotuloTipo(t: TipoConta) {
+    return TIPOS.find((x) => x[0] === t)?.[1] ?? t;
   }
 
   escolher(ev: Event) {
-    this.arquivo.set((ev.target as HTMLInputElement).files?.[0] ?? null);
-    this.resultado.set(null);
+    const input = ev.target as HTMLInputElement;
+    this.selecionar(input.files?.[0] ?? null);
+    input.value = '';
   }
 
   soltar(ev: DragEvent) {
     ev.preventDefault();
     this.arrastando.set(false);
-    this.arquivo.set(ev.dataTransfer?.files?.[0] ?? null);
-    this.resultado.set(null);
+    this.selecionar(ev.dataTransfer?.files?.[0] ?? null);
   }
 
-  enviar() {
+  private selecionar(f: File | null) {
+    const eid = this.ent.id();
+    this.limpar();
+    this.arquivo.set(f);
+    if (!f || !eid) return;
+    this.analisando.set(true);
+    this.api.analisarOfx(eid, f).subscribe({
+      next: (a) => {
+        this.analisando.set(false);
+        this.analise.set(a);
+        this.nomeNova = a.sugestao_nome;
+        this.saldoNova = Number(a.sugestao_saldo_inicial);
+        this.destino = a.numero ? 'nova' : 'existente';
+        this.contaEscolhida = this.contas()[0]?.id ?? null;
+      },
+      error: (e) => {
+        this.analisando.set(false);
+        this.erro.set(mensagemErro(e));
+      },
+    });
+  }
+
+  importar() {
     const eid = this.ent.id();
     const f = this.arquivo();
-    if (!eid || !f || !this.contaId) return;
+    const a = this.analise();
+    if (!eid || !f || !a) return;
+    const reconhecida = a.conta_existente && !this.escolherOutra();
+    const opcoes = reconhecida
+      ? { conta_id: a.conta_existente!.id }
+      : this.destino === 'existente'
+        ? { conta_id: this.contaEscolhida }
+        : { nome: this.nomeNova, saldo_inicial: this.saldoNova };
     this.erro.set('');
-    this.enviando.set(true);
-    this.api.importarOfx(eid, this.contaId, f).subscribe({
+    this.importando.set(true);
+    this.api.importarOfxAuto(eid, f, opcoes).subscribe({
       next: (r) => {
-        this.resultado.set(r);
+        this.importando.set(false);
+        this.analise.set(null);
         this.arquivo.set(null);
-        this.enviando.set(false);
+        this.resultado.set(r);
         this.carregar();
       },
       error: (e) => {
+        this.importando.set(false);
         this.erro.set(mensagemErro(e));
-        this.enviando.set(false);
       },
     });
   }
@@ -242,10 +473,17 @@ export class Importar {
     });
   }
 
+  private limpar() {
+    this.analise.set(null);
+    this.resultado.set(null);
+    this.erro.set('');
+    this.escolherOutra.set(false);
+  }
+
   private vazia() {
     return {
       nome: '',
-      tipo: 'corrente' as TipoConta,
+      tipo: 'caixa' as TipoConta,
       banco_codigo: '',
       agencia: '',
       numero: '',

@@ -240,12 +240,32 @@ class TransacaoAtualizar(BaseModel):
 
 class ImportacaoResultado(BaseModel):
     importacao_id: int
+    conta_id: int
+    conta_nome: str
+    conta_criada: bool = False
     total_lidas: int
     total_novas: int
     duplicadas: int
     categorizadas: int
     conciliadas: int
     saldo_extrato: Decimal | None
+
+
+class AnaliseOFX(BaseModel):
+    banco_codigo: str | None
+    banco_nome: str | None
+    agencia: str | None
+    numero: str | None
+    tipo: TipoConta
+    inicio: date | None
+    fim: date | None
+    total_transacoes: int
+    saldo_extrato: Decimal | None
+    data_saldo: date | None
+    conta_existente: "ContaLer | None"
+    outra_entidade: str | None = Field(None, description="Entidade que já tem esta conta cadastrada")
+    sugestao_nome: str
+    sugestao_saldo_inicial: Decimal
 
 
 class ConciliacaoResultado(BaseModel):

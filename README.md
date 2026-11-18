@@ -9,6 +9,7 @@ Backend em **Python (FastAPI)** e frontend em **Angular**. A arquitetura complet
 - Contas financeiras (corrente, cartão, caixa, maquininha) com saldo
 - Contas a pagar e a receber, com parcelamento, baixa manual, cancelamento e estorno de baixa
 - Importação de **OFX** (SGML 1.x e XML 2.x, cp1252/UTF-8, vírgula decimal), sem duplicar ao reimportar
+- **Conta criada a partir do primeiro extrato**: banco, agência e conta lidos do OFX, saldo inicial calculado para bater com o banco e reconhecimento automático nos extratos seguintes
 - Regras de categorização por trecho da descrição
 - Conciliação automática (mesmo valor, vencimento ± 5 dias, só quando há um único candidato) e manual
 - DRE gerencial (regime de caixa) e aging de contas a pagar e a receber

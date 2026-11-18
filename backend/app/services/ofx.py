@@ -32,6 +32,7 @@ class TransacaoOFX:
 @dataclass
 class ExtratoOFX:
     banco_id: str | None
+    instituicao: str | None  # <FI><ORG>, comum em OFX de cartão
     conta_id: str | None
     agencia: str | None
     moeda: str | None
@@ -114,7 +115,8 @@ def ler_ofx(conteudo: bytes) -> ExtratoOFX:
     bloco_saldo = texto[i_saldo : i_saldo + 300] if i_saldo >= 0 else ""
 
     extrato = ExtratoOFX(
-        banco_id=_tag(texto, "BANKID"),
+        banco_id=_tag(texto, "BANKID") or _tag(texto, "FID"),
+        instituicao=_tag(texto, "ORG"),
         conta_id=_tag(texto, "ACCTID"),
         agencia=_tag(texto, "BRANCHID"),
         moeda=_tag(texto, "CURDEF"),

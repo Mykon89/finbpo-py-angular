@@ -1,6 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
+  AnaliseOFX,
   Aging,
   Categoria,
   Conta,
@@ -66,6 +67,29 @@ export class Api {
       `${this.e(eid)}/contas/${contaId}/importar-ofx`,
       form,
     );
+  }
+
+  analisarOfx(eid: number, arquivo: File) {
+    const form = new FormData();
+    form.append('arquivo', arquivo);
+    return this.http.post<AnaliseOFX>(`${this.e(eid)}/ofx/analisar`, form);
+  }
+  importarOfxAuto(
+    eid: number,
+    arquivo: File,
+    opcoes: { conta_id?: number | null; nome?: string; saldo_inicial?: string | number | null },
+  ) {
+    const form = new FormData();
+    form.append('arquivo', arquivo);
+    if (opcoes.conta_id) form.append('conta_id', String(opcoes.conta_id));
+    if (opcoes.nome) form.append('nome', opcoes.nome);
+    if (
+      opcoes.saldo_inicial !== null &&
+      opcoes.saldo_inicial !== undefined &&
+      opcoes.saldo_inicial !== ''
+    )
+      form.append('saldo_inicial', String(opcoes.saldo_inicial));
+    return this.http.post<ImportacaoResultado>(`${this.e(eid)}/ofx/importar`, form);
   }
 
   // títulos
