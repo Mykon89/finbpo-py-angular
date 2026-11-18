@@ -1,0 +1,23 @@
+[project]
+name = "finbpo"
+version = "0.1.0"
+description = "FinBPO - gestão financeira multiempresa"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.163",
+    "sqlalchemy>=2.1",
+    "alembic>=1.20",
+    "psycopg[binary]>=3.3",
+    "pydantic-settings>=2.16",
+    "pyjwt>=2.15",
+    "pwdlib[argon2]>=0.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=9", "httpx>=0.28"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

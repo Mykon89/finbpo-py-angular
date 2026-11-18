@@ -1,0 +1,193 @@
+:root {
+  color-scheme: light;
+  --fundo: #f5f6f8;
+  --fundo-sutil: #eef1f5;
+  --cartao: #ffffff;
+  --texto: #1c2430;
+  --texto-sutil: #5d6878;
+  --borda: #dde2e9;
+  --primaria: #1f5fbf;
+  --primaria-texto: #ffffff;
+  --negativo: #c0362c;
+  --lateral: #14213d;
+  --lateral-texto: #e9edf5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --fundo: #0f141b;
+    --fundo-sutil: #1a212b;
+    --cartao: #151b23;
+    --texto: #e6eaf0;
+    --texto-sutil: #9aa5b5;
+    --borda: #2a3340;
+    --primaria: #5b9bf0;
+    --primaria-texto: #0b1220;
+    --negativo: #f07167;
+    --lateral: #0a1220;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+  background: var(--fundo);
+  color: var(--texto);
+}
+h1 {
+  font-size: 1.5rem;
+  margin: 0;
+}
+h2 {
+  font-size: 1rem;
+  margin: 0 0 12px;
+}
+
+.cabecalho {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.cartao {
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 16px;
+}
+.cartao.sem-padding {
+  padding: 0;
+  overflow-x: auto;
+}
+.sutil {
+  color: var(--texto-sutil);
+}
+.erro {
+  color: var(--negativo);
+  margin: 0;
+}
+.neg {
+  color: var(--negativo);
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--texto-sutil);
+}
+input,
+select,
+button {
+  font: inherit;
+  color: var(--texto);
+}
+input,
+select {
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  padding: 7px 9px;
+}
+input:focus,
+select:focus {
+  outline: 2px solid var(--primaria);
+  outline-offset: -1px;
+}
+button {
+  background: var(--fundo-sutil);
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+button.primario {
+  background: var(--primaria);
+  border-color: var(--primaria);
+  color: var(--primaria-texto);
+}
+button.link {
+  background: none;
+  border: none;
+  color: var(--primaria);
+  padding: 7px 6px;
+}
+.lateral select,
+.lateral button {
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.lateral select option {
+  color: #1c2430;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--borda);
+}
+th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--texto-sutil);
+  background: var(--fundo-sutil);
+}
+td.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.status {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--fundo-sutil);
+}
+.status[data-s='pago'] {
+  background: #d8f3e1;
+  color: #17643a;
+}
+.status[data-s='parcial'] {
+  background: #fff1cc;
+  color: #7a5600;
+}
+.status[data-s='cancelado'] {
+  text-decoration: line-through;
+}
+@media (prefers-color-scheme: dark) {
+  .status[data-s='pago'] {
+    background: #173d27;
+    color: #8fe0ad;
+  }
+  .status[data-s='parcial'] {
+    background: #42360f;
+    color: #f3d27a;
+  }
+}

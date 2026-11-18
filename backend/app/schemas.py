@@ -1,0 +1,267 @@
+from datetime import date
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+from app.models import (
+    GrupoDRE,
+    OrigemTransacao,
+    Segmento,
+    StatusTitulo,
+    TipoConta,
+    TipoEntidade,
+    TipoTitulo,
+)
+
+
+class ORM(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- auth
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UsuarioCriar(BaseModel):
+    nome: str
+    email: EmailStr
+    senha: str = Field(min_length=8)
+
+
+class UsuarioLer(ORM):
+    id: int
+    nome: str
+    email: str
+
+
+# --- entidade
+class EntidadeCriar(BaseModel):
+    tipo: TipoEntidade
+    segmento: Segmento
+    nome: str
+    documento: str | None = None
+    email: EmailStr | None = None
+    criar_plano_contas: bool = True
+
+
+class EntidadeAtualizar(BaseModel):
+    nome: str | None = None
+    documento: str | None = None
+    email: EmailStr | None = None
+    ativo: bool | None = None
+
+
+class EntidadeLer(ORM):
+    id: int
+    tipo: TipoEntidade
+    segmento: Segmento
+    nome: str
+    documento: str | None
+    email: str | None
+    ativo: bool
+
+
+# --- cadastros
+class CategoriaCriar(BaseModel):
+    nome: str
+    grupo_dre: GrupoDRE
+
+
+class CategoriaLer(ORM):
+    id: int
+    entidade_id: int
+    nome: str
+    grupo_dre: GrupoDRE
+
+
+class ContraparteCriar(BaseModel):
+    nome: str
+    documento: str | None = None
+
+
+class ContraparteLer(ORM):
+    id: int
+    entidade_id: int
+    nome: str
+    documento: str | None
+
+
+class CentroCustoCriar(BaseModel):
+    nome: str
+
+
+class CentroCustoLer(ORM):
+    id: int
+    entidade_id: int
+    nome: str
+
+
+class ContaCriar(BaseModel):
+    tipo: TipoConta
+    nome: str
+    banco_codigo: str | None = None
+    agencia: str | None = None
+    numero: str | None = None
+    saldo_inicial: Decimal = Decimal("0")
+
+
+class ContaLer(ORM):
+    id: int
+    entidade_id: int
+    tipo: TipoConta
+    nome: str
+    banco_codigo: str | None
+    agencia: str | None
+    numero: str | None
+    saldo_inicial: Decimal
+    ativo: bool
+
+
+class ContaSaldo(ContaLer):
+    saldo_atual: Decimal
+
+
+class RegraCriar(BaseModel):
+    padrao: str = Field(min_length=2)
+    categoria_id: int
+    prioridade: int = 100
+
+
+class RegraLer(ORM):
+    id: int
+    entidade_id: int
+    padrao: str
+    categoria_id: int
+    prioridade: int
+
+
+# --- títulos
+class TituloCriar(BaseModel):
+    tipo: TipoTitulo
+    descricao: str
+    valor: Decimal = Field(gt=0, description="Valor de cada parcela")
+    vencimento: date = Field(description="Vencimento da 1ª parcela")
+    competencia: date | None = None
+    contraparte_id: int | None = None
+    categoria_id: int | None = None
+    centro_custo_id: int | None = None
+    parcelas: int = Field(1, ge=1, le=360)
+    observacao: str | None = None
+
+
+class TituloAtualizar(BaseModel):
+    descricao: str | None = None
+    valor: Decimal | None = Field(None, gt=0)
+    vencimento: date | None = None
+    competencia: date | None = None
+    contraparte_id: int | None = None
+    categoria_id: int | None = None
+    centro_custo_id: int | None = None
+    observacao: str | None = None
+
+
+class BaixaLer(ORM):
+    id: int
+    transacao_id: int | None
+    data: date
+    valor: Decimal
+
+
+class TituloLer(ORM):
+    id: int
+    entidade_id: int
+    tipo: TipoTitulo
+    descricao: str
+    contraparte_id: int | None
+    categoria_id: int | None
+    centro_custo_id: int | None
+    competencia: date
+    vencimento: date
+    valor: Decimal
+    saldo: Decimal
+    status: StatusTitulo
+    parcela: int
+    total_parcelas: int
+    observacao: str | None
+    baixas: list[BaixaLer] = []
+
+
+class BaixaManual(BaseModel):
+    data: date
+    valor: Decimal | None = Field(None, gt=0, description="Padrão: saldo do título")
+
+
+# --- transações / importação
+class TransacaoLer(ORM):
+    id: int
+    conta_id: int
+    data: date
+    valor: Decimal
+    descricao: str
+    fitid: str | None
+    origem: OrigemTransacao
+    categoria_id: int | None
+    conciliada: bool
+
+
+class TransacaoAtualizar(BaseModel):
+    categoria_id: int | None = None
+    criar_regra: bool = Field(False, description="Cria regra de categorização com a descrição")
+
+
+class ImportacaoResultado(BaseModel):
+    importacao_id: int
+    total_lidas: int
+    total_novas: int
+    duplicadas: int
+    categorizadas: int
+    conciliadas: int
+    saldo_extrato: Decimal | None
+
+
+class ConciliacaoResultado(BaseModel):
+    conciliadas: int
+    ambiguas: int
+    sem_candidato: int
+
+
+class VinculoManual(BaseModel):
+    transacao_id: int
+    titulo_id: int
+
+
+# --- relatórios
+class LinhaDetalhe(BaseModel):
+    categoria: str
+    valor: Decimal
+
+
+class LinhaDRE(BaseModel):
+    grupo: str | None
+    rotulo: str
+    valor: Decimal
+    detalhe: list[LinhaDetalhe]
+
+
+class DRE(BaseModel):
+    entidade_id: int
+    competencia: date
+    linhas: list[LinhaDRE]
+    resultado_liquido: Decimal
+    margem_liquida_pct: float | None
+    nao_operacional: Decimal
+    sem_categoria: Decimal
+
+
+class AgingFaixa(BaseModel):
+    faixa: str
+    quantidade: int
+    valor: Decimal
+
+
+class Aging(BaseModel):
+    tipo: TipoTitulo
+    data_base: date
+    faixas: list[AgingFaixa]

@@ -1,0 +1,27 @@
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.config import settings
+from app.routers import auth, entidades, relatorios, titulos, transacoes
+from app.security import usuario_atual
+
+app = FastAPI(title="FinBPO", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+api = APIRouter(prefix="/api")
+api.include_router(auth.router)
+protegido = [Depends(usuario_atual)]
+for r in (entidades.router, titulos.router, transacoes.router, relatorios.router):
+    api.include_router(r, dependencies=protegido)
+app.include_router(api)
+
+
+@app.get("/api/saude", tags=["infra"])
+def saude():
+    return {"status": "ok"}
