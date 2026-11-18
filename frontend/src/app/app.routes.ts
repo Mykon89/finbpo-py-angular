@@ -21,6 +21,14 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/lancamentos').then((m) => m.Lancamentos),
       },
       {
+        path: 'recorrencias',
+        loadComponent: () => import('./pages/recorrencias').then((m) => m.Recorrencias),
+      },
+      {
+        path: 'comissoes',
+        loadComponent: () => import('./pages/comissoes').then((m) => m.Comissoes),
+      },
+      {
         path: 'plano-contas',
         loadComponent: () => import('./pages/plano-contas').then((m) => m.PlanoContas),
       },

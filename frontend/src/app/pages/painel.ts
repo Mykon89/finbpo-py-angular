@@ -3,12 +3,12 @@ import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { Api } from '../core/api';
 import { EntidadeAtual } from '../core/entidade-atual';
-import { BrlPipe } from '../core/formato';
-import { Aging, Conta, DRE } from '../core/models';
+import { BrlPipe, DataBrPipe } from '../core/formato';
+import { Aging, Conta, DRE, PainelPagar } from '../core/models';
 
 @Component({
   selector: 'app-painel',
-  imports: [FormsModule, BrlPipe],
+  imports: [FormsModule, BrlPipe, DataBrPipe],
   template: `
     <header class="cabecalho">
       <h1>Painel</h1>
@@ -44,6 +44,59 @@ import { Aging, Conta, DRE } from '../core/models';
           <span>Sem categoria</span><strong>{{ dre()?.sem_categoria | brl }}</strong>
         </div>
       </section>
+
+      @if (pagar(); as p) {
+        <section class="grade-kpi">
+          <div class="cartao kpi">
+            <span>Vence hoje</span><strong>{{ p.vence_hoje | brl }}</strong>
+          </div>
+          <div class="cartao kpi">
+            <span>Atrasado</span
+            ><strong [class.neg]="+p.atrasado > 0">{{ p.atrasado | brl }}</strong>
+          </div>
+          <div class="cartao kpi">
+            <span>Próximos 7 dias</span><strong>{{ p.proximos_dias | brl }}</strong>
+          </div>
+          <div class="cartao kpi">
+            <span>Aberto até o fim do mês</span><strong>{{ p.aberto_ate_fim_mes | brl }}</strong>
+          </div>
+          <div class="cartao kpi">
+            <span>Pago no mês</span><strong>{{ p.pago_no_mes | brl }}</strong>
+          </div>
+        </section>
+        <section class="cartao sem-padding agenda">
+          <header class="cabecalho-agenda">
+            <h2>Contas a pagar em aberto</h2>
+            <label
+              >até daqui a
+              <input
+                type="number"
+                min="0"
+                class="dias"
+                [ngModel]="dias()"
+                (ngModelChange)="dias.set(+$event || 0)"
+                aria-label="Dias à frente"
+              />
+              dias</label
+            >
+          </header>
+          <table>
+            <tbody>
+              @for (t of p.titulos; track t.id) {
+                <tr [class.neg]="t.vencimento < hoje">
+                  <td>{{ t.vencimento | dataBr }}</td>
+                  <td>{{ t.descricao }}</td>
+                  <td class="num">{{ t.saldo | brl }}</td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td class="sutil">Nada em aberto no período.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
+      }
 
       <div class="duas-colunas">
         <section class="cartao">
@@ -127,6 +180,25 @@ import { Aging, Conta, DRE } from '../core/models';
       font-size: 1.35rem;
       font-variant-numeric: tabular-nums;
     }
+    .agenda {
+      margin-bottom: 16px;
+      max-height: 360px;
+      overflow: auto;
+    }
+    .cabecalho-agenda {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 12px;
+    }
+    .cabecalho-agenda label {
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+    }
+    .dias {
+      width: 70px;
+    }
     .duas-colunas {
       display: grid;
       grid-template-columns: 3fr 2fr;
@@ -161,8 +233,15 @@ export class Painel {
   contas = signal<Conta[]>([]);
   agings = signal<Aging[]>([]);
   saldoTotal = signal(0);
+  pagar = signal<PainelPagar | null>(null);
+  dias = signal(7);
+  hoje = new Date().toISOString().slice(0, 10);
 
   constructor() {
+    effect(() => {
+      const eid = this.ent.id();
+      if (eid) this.api.painelPagar(eid, this.dias()).subscribe((p) => this.pagar.set(p));
+    });
     effect(() => {
       const eid = this.ent.id();
       const [ano, mes] = this.competencia().split('-').map(Number);

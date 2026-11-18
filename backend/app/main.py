@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, cnpj, entidades, relatorios, titulos, transacoes
+from app.routers import auth, cnpj, corretagem, entidades, relatorios, titulos, transacoes
 from app.mcp_server import app_mcp, ciclo_de_vida
 from app.security import usuario_atual
 
@@ -27,7 +27,7 @@ app.add_middleware(
 api = APIRouter(prefix="/api")
 api.include_router(auth.router)
 protegido = [Depends(usuario_atual)]
-for r in (cnpj.router, entidades.router, titulos.router, transacoes.router, relatorios.router):
+for r in (cnpj.router, entidades.router, titulos.router, transacoes.router, relatorios.router, corretagem.router):
     api.include_router(r, dependencies=protegido)
 app.include_router(api)
 

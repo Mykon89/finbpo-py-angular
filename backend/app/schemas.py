@@ -4,7 +4,10 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models import (
+    AjusteDiaUtil,
+    Frequencia,
     GrupoDRE,
+    Natureza,
     OrigemTransacao,
     Segmento,
     StatusTitulo,
@@ -223,6 +226,9 @@ class TituloLer(ORM):
     parcela: int
     total_parcelas: int
     observacao: str | None
+    desconto: Decimal = Decimal("0")
+    natureza: Natureza | None = None
+    recorrencia_id: int | None = None
     baixas: list[BaixaLer] = []
 
 
@@ -358,3 +364,140 @@ class Aging(BaseModel):
     tipo: TipoTitulo
     data_base: date
     faixas: list[AgingFaixa]
+
+
+# --- recorrências
+class RecorrenciaCriar(BaseModel):
+    tipo: TipoTitulo = TipoTitulo.PAGAR
+    descricao: str = Field(min_length=1, description="Aceita {COMP} (mês anterior, MM/AAAA) e {MES} (mês do vencimento)")
+    valor: Decimal = Field(gt=0)
+    frequencia: Frequencia = Frequencia.MENSAL
+    inicio: date
+    fim: date | None = None
+    dia: int | None = Field(None, ge=1, le=31)
+    dia_util: int | None = Field(None, ge=1, le=23)
+    ajuste: AjusteDiaUtil = AjusteDiaUtil.NENHUM
+    parcelas: int | None = Field(None, ge=1, le=360)
+    reajuste_pct: Decimal | None = None
+    mes_reajuste: int | None = Field(None, ge=1, le=12)
+    contraparte_id: int | None = None
+    categoria_id: int | None = None
+    centro_custo_id: int | None = None
+    natureza: Natureza | None = None
+    ativa: bool = True
+    contraparte_nome: str | None = Field(None, description="Cria/acha o fornecedor pelo nome, se não vier contraparte_id")
+
+
+class RecorrenciaAtualizar(BaseModel):
+    descricao: str | None = None
+    valor: Decimal | None = Field(None, gt=0)
+    frequencia: Frequencia | None = None
+    inicio: date | None = None
+    fim: date | None = None
+    dia: int | None = Field(None, ge=1, le=31)
+    dia_util: int | None = Field(None, ge=1, le=23)
+    ajuste: AjusteDiaUtil | None = None
+    parcelas: int | None = None
+    reajuste_pct: Decimal | None = None
+    mes_reajuste: int | None = None
+    contraparte_id: int | None = None
+    categoria_id: int | None = None
+    centro_custo_id: int | None = None
+    natureza: Natureza | None = None
+    ativa: bool | None = None
+    contraparte_nome: str | None = None
+
+
+class RecorrenciaLer(ORM, RecorrenciaCriar):
+    id: int
+    codigo: str | None
+    proximo_vencimento: date | None = None
+
+
+# --- corretagem (comissões de seguradoras)
+class ImportacaoPlanilha(BaseModel):
+    abas: list[str]
+    contas_pagar: int
+    contas_pagas: int
+    recorrencias: int
+    regras: int
+    extratos: int
+    comissoes: int
+    categorias_criadas: list[str]
+    fornecedores_criados: int
+    ignoradas: int
+
+
+class ComissaoLer(ORM):
+    id: int
+    extrato_id: int | None
+    data: date
+    apolice: str | None
+    seguradora: str
+    ramo: str | None
+    cliente: str | None
+    bruta: Decimal
+    imposto: Decimal
+    liquida: Decimal
+    origem: str | None
+    produtor: str | None
+    parceiro: str | None
+    observacao: str | None
+    parcela: int | None
+
+
+class ComissaoAtualizar(BaseModel):
+    origem: str | None = None
+    produtor: str | None = None
+    parceiro: str | None = None
+    observacao: str | None = None
+    ramo: str | None = None
+
+
+class ExtratoComissaoLer(ORM):
+    id: int
+    codigo: str
+    seguradora: str
+    data: date
+    documento: str | None
+    bruto: Decimal
+    iss: Decimal
+    liquido: Decimal
+    debitos: Decimal
+    recebido_valor: Decimal | None
+    recebido_em: date | None
+    linhas: int = 0
+    situacao: str = "A RECEBER"
+
+
+class LinhaComparativo(BaseModel):
+    chave: str
+    anterior: Decimal
+    atual: Decimal
+    variacao: Decimal
+    variacao_pct: float | None
+    qtd: int
+
+
+class Comparativo(BaseModel):
+    mes: str
+    anterior: str
+    por_ramo: list[LinhaComparativo]
+    por_seguradora: list[LinhaComparativo]
+    total_anterior: Decimal
+    total_atual: Decimal
+    imposto_atual: Decimal
+    liquido_atual: Decimal
+    novos_qtd: int
+    novos_valor: Decimal
+    sem_vinculo: int
+
+
+class PainelPagar(BaseModel):
+    vence_hoje: Decimal
+    atrasado: Decimal
+    proximos_dias: Decimal
+    aberto_ate_fim_mes: Decimal
+    pago_no_mes: Decimal
+    dias: int
+    titulos: list[TituloLer]

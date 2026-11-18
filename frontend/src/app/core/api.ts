@@ -4,7 +4,13 @@ import {
   AnaliseOFX,
   Aging,
   Categoria,
+  Comissao,
+  Comparativo,
   ComplementoResultado,
+  ExtratoComissao,
+  ImportacaoPlanilha,
+  PainelPagar,
+  Recorrencia,
   Conta,
   DadosCNPJ,
   DRE,
@@ -115,6 +121,59 @@ export class Api {
       `${this.e(eid)}/contas/${contaId}/complementar`,
       form,
     );
+  }
+
+  // planilha, comissões, recorrências
+  importarPlanilha(eid: number, arquivo: File) {
+    const form = new FormData();
+    form.append('arquivo', arquivo);
+    return this.http.post<ImportacaoPlanilha>(`${this.e(eid)}/importar-planilha`, form);
+  }
+  comissoes(
+    eid: number,
+    filtro: {
+      mes?: string;
+      seguradora?: string;
+      ramo?: string;
+      extrato_id?: number;
+      busca?: string;
+      sem_vinculo?: boolean;
+    },
+  ) {
+    return this.http.get<Comissao[]>(`${this.e(eid)}/comissoes`, { params: params(filtro) });
+  }
+  atualizarComissao(eid: number, id: number, dados: Partial<Comissao>) {
+    return this.http.patch<Comissao>(`${this.e(eid)}/comissoes/${id}`, dados);
+  }
+  comparativo(eid: number, mes: string) {
+    return this.http.get<Comparativo>(`${this.e(eid)}/comissoes/comparativo`, {
+      params: params({ mes }),
+    });
+  }
+  extratosComissao(eid: number, mes?: string) {
+    return this.http.get<ExtratoComissao[]>(`${this.e(eid)}/extratos-comissao`, {
+      params: params({ mes }),
+    });
+  }
+  recorrencias(eid: number) {
+    return this.http.get<Recorrencia[]>(`${this.e(eid)}/recorrencias`);
+  }
+  criarRecorrencia(eid: number, dados: Partial<Recorrencia>) {
+    return this.http.post<Recorrencia>(`${this.e(eid)}/recorrencias`, dados);
+  }
+  atualizarRecorrencia(eid: number, id: number, dados: Partial<Recorrencia>) {
+    return this.http.patch<Recorrencia>(`${this.e(eid)}/recorrencias/${id}`, dados);
+  }
+  removerRecorrencia(eid: number, id: number) {
+    return this.http.delete<void>(`${this.e(eid)}/recorrencias/${id}`);
+  }
+  gerarRecorrencias(eid: number, ate?: string, recorrencia_id?: number) {
+    return this.http.post<Titulo[]>(`${this.e(eid)}/recorrencias/gerar`, null, {
+      params: params({ ate, recorrencia_id }),
+    });
+  }
+  painelPagar(eid: number, dias: number) {
+    return this.http.get<PainelPagar>(`${this.e(eid)}/painel-pagar`, { params: params({ dias }) });
   }
 
   // títulos

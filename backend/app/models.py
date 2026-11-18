@@ -64,6 +64,26 @@ class OrigemTransacao(str, enum.Enum):
     MANUAL = "manual"
 
 
+class Natureza(str, enum.Enum):
+    FIXA = "fixa"
+    VARIAVEL = "variavel"
+
+
+class Frequencia(str, enum.Enum):
+    MENSAL = "mensal"
+    SEMANAL = "semanal"
+    QUINZENAL = "quinzenal"
+    ANUAL = "anual"
+    UNICA = "unica"
+    PARCELADA = "parcelada"
+
+
+class AjusteDiaUtil(str, enum.Enum):
+    NENHUM = "nenhum"
+    ANTECIPAR = "antecipar"
+    POSTERGAR = "postergar"
+
+
 class GrupoDRE(str, enum.Enum):
     RECEITA_BRUTA = "receita_bruta"
     DEDUCOES = "deducoes"
@@ -234,6 +254,10 @@ class Titulo(Base):
     total_parcelas: Mapped[int] = mapped_column(default=1)
     grupo_parcelas: Mapped[str | None] = mapped_column(String(36))
     observacao: Mapped[str | None] = mapped_column(Text)
+    desconto: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal("0"), server_default="0")
+    natureza: Mapped[Natureza | None] = mapped_column(_enum(Natureza))
+    codigo_externo: Mapped[str | None] = mapped_column(String(40), index=True)  # ID de origem (ex.: M0001 da planilha)
+    recorrencia_id: Mapped[int | None] = mapped_column(ForeignKey("recorrencia.id", ondelete="SET NULL"), index=True)
 
     baixas: Mapped[list["Baixa"]] = relationship(back_populates="titulo", cascade="all, delete-orphan")
 
@@ -243,7 +267,7 @@ class Titulo(Base):
 
     @property
     def saldo(self) -> Decimal:
-        return self.valor - self.valor_baixado
+        return self.valor - (self.desconto or Decimal("0")) - self.valor_baixado
 
 
 class Baixa(Base):
@@ -268,3 +292,79 @@ class RegraCategorizacao(Base):
     contraparte_id: Mapped[int | None] = mapped_column(ForeignKey("contraparte.id", ondelete="CASCADE"), index=True)
     categoria_id: Mapped[int] = mapped_column(ForeignKey("categoria.id", ondelete="CASCADE"))
     prioridade: Mapped[int] = mapped_column(default=100)  # menor = avaliada primeiro
+
+
+class Recorrencia(Base):
+    """Modelo de conta que se repete; gera títulos (contas a pagar/receber) até a data pedida."""
+
+    __tablename__ = "recorrencia"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
+    codigo: Mapped[str | None] = mapped_column(String(20))
+    ativa: Mapped[bool] = mapped_column(default=True)
+    tipo: Mapped[TipoTitulo] = mapped_column(_enum(TipoTitulo))
+    contraparte_id: Mapped[int | None] = mapped_column(ForeignKey("contraparte.id", ondelete="SET NULL"))
+    descricao: Mapped[str] = mapped_column(String(255))  # aceita {COMP} (mês anterior) e {MES} (mês do vencimento)
+    categoria_id: Mapped[int | None] = mapped_column(ForeignKey("categoria.id", ondelete="SET NULL"))
+    centro_custo_id: Mapped[int | None] = mapped_column(ForeignKey("centro_custo.id", ondelete="SET NULL"))
+    valor: Mapped[Decimal] = mapped_column(Dinheiro)
+    frequencia: Mapped[Frequencia] = mapped_column(_enum(Frequencia))
+    dia: Mapped[int | None] = mapped_column()  # dia do mês (mensal/anual/parcelada)
+    dia_util: Mapped[int | None] = mapped_column()  # alternativa: n-ésimo dia útil do mês
+    ajuste: Mapped[AjusteDiaUtil] = mapped_column(_enum(AjusteDiaUtil), default=AjusteDiaUtil.NENHUM)
+    inicio: Mapped[date] = mapped_column(Date)
+    fim: Mapped[date | None] = mapped_column(Date)
+    parcelas: Mapped[int | None] = mapped_column()
+    reajuste_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 3))
+    mes_reajuste: Mapped[int | None] = mapped_column()
+    natureza: Mapped[Natureza | None] = mapped_column(_enum(Natureza))
+
+    contraparte: Mapped[Contraparte | None] = relationship()
+
+
+class ExtratoComissao(Base):
+    """Extrato de comissões de uma seguradora (aba RECEBER/Conferência da planilha)."""
+
+    __tablename__ = "extrato_comissao"
+    __table_args__ = (UniqueConstraint("entidade_id", "codigo", name="uq_extrato_comissao_codigo"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
+    codigo: Mapped[str] = mapped_column(String(80))  # ex.: BRADESCO-27548479
+    seguradora: Mapped[str] = mapped_column(String(60), index=True)
+    data: Mapped[date] = mapped_column(Date, index=True)
+    documento: Mapped[str | None] = mapped_column(String(160))
+    bruto: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal("0"))
+    iss: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal("0"))
+    liquido: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal("0"))
+    debitos: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal("0"))
+    arquivo: Mapped[str | None] = mapped_column(String(255))
+    importado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    recebido_valor: Mapped[Decimal | None] = mapped_column(Dinheiro)
+    recebido_em: Mapped[date | None] = mapped_column(Date)
+
+
+class Comissao(Base):
+    """Uma linha de comissão (apólice/parcela) de um extrato de seguradora — aba BASE da planilha."""
+
+    __tablename__ = "comissao"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
+    extrato_id: Mapped[int | None] = mapped_column(ForeignKey("extrato_comissao.id", ondelete="CASCADE"), index=True)
+    data: Mapped[date] = mapped_column(Date, index=True)  # data do extrato
+    apolice: Mapped[str | None] = mapped_column(String(80))
+    seguradora: Mapped[str] = mapped_column(String(60), index=True)
+    ramo: Mapped[str | None] = mapped_column(String(40), index=True)
+    cliente: Mapped[str | None] = mapped_column(String(200))
+    bruta: Mapped[Decimal] = mapped_column(Dinheiro)
+    imposto: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal("0"))
+    liquida: Mapped[Decimal] = mapped_column(Dinheiro)
+    origem: Mapped[str | None] = mapped_column(String(40))
+    produtor: Mapped[str | None] = mapped_column(String(60))
+    parceiro: Mapped[str | None] = mapped_column(String(60))
+    observacao: Mapped[str | None] = mapped_column(String(255))
+    parcela: Mapped[int | None] = mapped_column()
+    prevista: Mapped[Decimal | None] = mapped_column(Dinheiro)
+    hash: Mapped[str] = mapped_column(String(64), index=True)  # deduplicação na reimportação

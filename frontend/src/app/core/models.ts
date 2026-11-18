@@ -159,6 +159,9 @@ export interface Titulo {
   parcela: number;
   total_parcelas: number;
   observacao: string | null;
+  desconto?: string;
+  natureza?: 'fixa' | 'variavel' | null;
+  recorrencia_id?: number | null;
   baixas: Baixa[];
 }
 
@@ -256,3 +259,110 @@ export const SEGMENTOS: Record<Segmento, string> = {
   clinica: 'Clínica de estética',
   pf: 'Pessoa física',
 };
+
+export type Frequencia = 'mensal' | 'semanal' | 'quinzenal' | 'anual' | 'unica' | 'parcelada';
+export type AjusteDiaUtil = 'nenhum' | 'antecipar' | 'postergar';
+
+export interface Recorrencia {
+  id: number;
+  codigo: string | null;
+  ativa: boolean;
+  tipo: TipoTitulo;
+  descricao: string;
+  valor: string;
+  frequencia: Frequencia;
+  inicio: string;
+  fim: string | null;
+  dia: number | null;
+  dia_util: number | null;
+  ajuste: AjusteDiaUtil;
+  parcelas: number | null;
+  reajuste_pct: string | null;
+  mes_reajuste: number | null;
+  contraparte_id: number | null;
+  categoria_id: number | null;
+  centro_custo_id: number | null;
+  natureza: 'fixa' | 'variavel' | null;
+  proximo_vencimento: string | null;
+  contraparte_nome: string | null;
+}
+
+export interface ImportacaoPlanilha {
+  abas: string[];
+  contas_pagar: number;
+  contas_pagas: number;
+  recorrencias: number;
+  regras: number;
+  extratos: number;
+  comissoes: number;
+  categorias_criadas: string[];
+  fornecedores_criados: number;
+  ignoradas: number;
+}
+
+export interface Comissao {
+  id: number;
+  extrato_id: number | null;
+  data: string;
+  apolice: string | null;
+  seguradora: string;
+  ramo: string | null;
+  cliente: string | null;
+  bruta: string;
+  imposto: string;
+  liquida: string;
+  origem: string | null;
+  produtor: string | null;
+  parceiro: string | null;
+  observacao: string | null;
+  parcela: number | null;
+}
+
+export interface ExtratoComissao {
+  id: number;
+  codigo: string;
+  seguradora: string;
+  data: string;
+  documento: string | null;
+  bruto: string;
+  iss: string;
+  liquido: string;
+  debitos: string;
+  recebido_valor: string | null;
+  recebido_em: string | null;
+  linhas: number;
+  situacao: 'A RECEBER' | 'RECEBIDO' | 'DIVERGENTE';
+}
+
+export interface LinhaComparativo {
+  chave: string;
+  anterior: string;
+  atual: string;
+  variacao: string;
+  variacao_pct: number | null;
+  qtd: number;
+}
+
+export interface Comparativo {
+  mes: string;
+  anterior: string;
+  por_ramo: LinhaComparativo[];
+  por_seguradora: LinhaComparativo[];
+  total_anterior: string;
+  total_atual: string;
+  imposto_atual: string;
+  liquido_atual: string;
+  novos_qtd: number;
+  novos_valor: string;
+  sem_vinculo: number;
+}
+
+export interface PainelPagar {
+  vence_hoje: string;
+  atrasado: string;
+  proximos_dias: string;
+  aberto_ate_fim_mes: string;
+  pago_no_mes: string;
+  dias: number;
+  titulos: Titulo[];
+}
