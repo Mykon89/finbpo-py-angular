@@ -17,6 +17,10 @@ export const routes: Routes = [
       },
       { path: 'importar', loadComponent: () => import('./pages/importar').then((m) => m.Importar) },
       {
+        path: 'lancamentos',
+        loadComponent: () => import('./pages/lancamentos').then((m) => m.Lancamentos),
+      },
+      {
         path: 'conciliacao',
         loadComponent: () => import('./pages/conciliacao').then((m) => m.Conciliacao),
       },

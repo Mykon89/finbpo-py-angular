@@ -1,10 +1,17 @@
 import { Component, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { Api } from '../core/api';
 import { mensagemErro } from '../core/auth';
 import { EntidadeAtual } from '../core/entidade-atual';
 import { BrlPipe, DataBrPipe } from '../core/formato';
-import { AnaliseOFX, Conta, ImportacaoResultado, TipoConta } from '../core/models';
+import {
+  AnaliseOFX,
+  ComplementoResultado,
+  Conta,
+  ImportacaoResultado,
+  TipoConta,
+} from '../core/models';
 
 const TIPOS: [TipoConta, string][] = [
   ['corrente', 'Conta corrente'],
@@ -14,14 +21,25 @@ const TIPOS: [TipoConta, string][] = [
   ['maquininha', 'Maquininha'],
 ];
 
+const EXT_COMPLEMENTO = ['xlsx', 'xls', 'csv', 'pdf'];
+
+function extensao(f: File) {
+  return f.name.toLowerCase().split('.').pop() ?? '';
+}
+
 @Component({
   selector: 'app-importar',
-  imports: [FormsModule, BrlPipe, DataBrPipe],
+  imports: [FormsModule, RouterLink, BrlPipe, DataBrPipe],
   template: `
     <header class="cabecalho"><h1>Contas e extratos</h1></header>
 
     <section class="cartao bloco">
-      <h2>Importar extrato OFX</h2>
+      <h2>Importar extrato</h2>
+      <p class="sutil dica">
+        Envie o <strong>OFX</strong> e, se quiser, o mesmo extrato em
+        <strong>XLSX, XLS, CSV ou PDF</strong>. O OFX traz os lançamentos; os outros arquivos
+        completam o nome e o CPF/CNPJ de quem pagou ou recebeu.
+      </p>
       <label
         class="soltar"
         [class.sobre]="arrastando()"
@@ -29,11 +47,25 @@ const TIPOS: [TipoConta, string][] = [
         (dragleave)="arrastando.set(false)"
         (drop)="soltar($event)"
       >
-        <input type="file" accept=".ofx,.OFX" (change)="escolher($event)" hidden />
-        @if (arquivo(); as a) {
-          <strong>{{ a.name }}</strong> · clique para trocar
+        <input
+          type="file"
+          multiple
+          accept=".ofx,.xlsx,.xls,.csv,.pdf"
+          (change)="escolher($event)"
+          hidden
+        />
+        @if (ofx() || complementos().length) {
+          <span class="arquivos">
+            @if (ofx(); as o) {
+              <span class="chip ofx">OFX · {{ o.name }}</span>
+            }
+            @for (f of complementos(); track f.name) {
+              <span class="chip">{{ f.name }}</span>
+            }
+          </span>
+          <span class="pequeno">clique ou arraste para trocar os arquivos</span>
         } @else {
-          Arraste o arquivo .ofx aqui ou clique para escolher
+          Arraste os arquivos aqui ou clique para escolher (pode selecionar vários)
         }
       </label>
       @if (analisando()) {
@@ -41,6 +73,34 @@ const TIPOS: [TipoConta, string][] = [
       }
       @if (erro()) {
         <p class="erro">{{ erro() }}</p>
+      }
+
+      @if (!ofx() && complementos().length) {
+        <div class="analise">
+          <p class="aviso">
+            Sem OFX: os arquivos serão usados para
+            <strong>completar lançamentos já importados</strong> da conta escolhida (pela data e
+            valor).
+          </p>
+          <div class="acoes">
+            <label
+              >Conta
+              <select name="contaComp" [(ngModel)]="contaComplemento">
+                @for (c of contas(); track c.id) {
+                  <option [ngValue]="c.id">{{ c.nome }}</option>
+                }
+              </select>
+            </label>
+            <button
+              class="primario"
+              type="button"
+              [disabled]="importando() || !contaComplemento"
+              (click)="complementarSo()"
+            >
+              {{ importando() ? 'Processando…' : 'Completar lançamentos' }}
+            </button>
+          </div>
+        </div>
       }
 
       @if (analise(); as a) {
@@ -78,6 +138,12 @@ const TIPOS: [TipoConta, string][] = [
               </div>
             }
           </dl>
+          @if (complementos().length) {
+            <p class="aviso ok">
+              {{ complementos().length }} arquivo(s) complementar(es) serão usados para buscar nome
+              e CPF/CNPJ.
+            </p>
+          }
 
           @if (a.outra_entidade) {
             <p class="aviso erro">
@@ -120,10 +186,10 @@ const TIPOS: [TipoConta, string][] = [
                 <label class="largo"
                   >Nome da conta <input name="nome" [(ngModel)]="nomeNova"
                 /></label>
-                <label>
-                  Saldo inicial
-                  <input name="saldoInicial" type="number" step="0.01" [(ngModel)]="saldoNova" />
-                </label>
+                <label
+                  >Saldo inicial
+                  <input name="saldoInicial" type="number" step="0.01" [(ngModel)]="saldoNova"
+                /></label>
               </div>
               @if (a.saldo_extrato !== null) {
                 <p class="sutil pequeno">
@@ -185,7 +251,29 @@ const TIPOS: [TipoConta, string][] = [
               Categorizados por regra: {{ r.categorizadas }} · Conciliados automaticamente:
               {{ r.conciliadas }}
             </li>
+            @if (r.com_documento_no_ofx) {
+              <li>CPF/CNPJ encontrado no próprio OFX: {{ r.com_documento_no_ofx }}</li>
+            }
           </ul>
+        </div>
+      }
+      @if (resultadoComplemento(); as c) {
+        <div class="aviso ok resultado">
+          <strong>Complemento ({{ c.arquivos.join(', ') || 'nenhum arquivo lido' }})</strong>
+          <ul>
+            <li>
+              Linhas lidas: {{ c.linhas_lidas }} · Casadas com lançamentos:
+              <strong>{{ c.linhas_lidas - c.sem_correspondencia }}</strong>
+              @if (c.sem_correspondencia) {
+                · sem correspondência: {{ c.sem_correspondencia }}
+              }
+            </li>
+            <li>Novos clientes/fornecedores identificados: {{ c.contrapartes_criadas }}</li>
+            @for (e of c.erros; track e) {
+              <li class="erro">{{ e }}</li>
+            }
+          </ul>
+          <a routerLink="/lancamentos">Ver lançamentos</a>
         </div>
       }
     </section>
@@ -262,17 +350,40 @@ const TIPOS: [TipoConta, string][] = [
     .bloco h2 {
       margin: 0;
     }
+    .dica {
+      margin: 0;
+      font-size: 0.85rem;
+    }
     .soltar {
       border: 2px dashed var(--borda);
       border-radius: 8px;
-      padding: 28px 16px;
+      padding: 24px 16px;
       text-align: center;
       cursor: pointer;
       color: var(--texto-sutil);
+      align-items: center;
     }
     .soltar.sobre {
       border-color: var(--primaria);
       color: var(--texto);
+    }
+    .arquivos {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: center;
+    }
+    .chip {
+      background: var(--fundo-sutil);
+      border: 1px solid var(--borda);
+      color: var(--texto);
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 0.8rem;
+    }
+    .chip.ofx {
+      border-color: var(--primaria);
+      font-weight: 600;
     }
     .analise {
       display: flex;
@@ -301,7 +412,8 @@ const TIPOS: [TipoConta, string][] = [
       border-radius: 6px;
       background: var(--fundo-sutil);
     }
-    .aviso.erro {
+    .aviso.erro,
+    li.erro {
       color: var(--negativo);
     }
     .aviso.ok {
@@ -331,12 +443,15 @@ const TIPOS: [TipoConta, string][] = [
     .acoes {
       display: flex;
       gap: 12px;
-      align-items: center;
+      align-items: end;
       flex-wrap: wrap;
     }
     .resultado ul {
-      margin: 6px 0 0;
+      margin: 6px 0;
       padding-left: 18px;
+    }
+    .resultado a {
+      color: var(--primaria);
     }
     .pequeno {
       font-size: 0.8rem;
@@ -364,9 +479,11 @@ export class Importar {
   private ent = inject(EntidadeAtual);
   tipos = TIPOS;
   contas = signal<Conta[]>([]);
-  arquivo = signal<File | null>(null);
+  ofx = signal<File | null>(null);
+  complementos = signal<File[]>([]);
   analise = signal<AnaliseOFX | null>(null);
   resultado = signal<ImportacaoResultado | null>(null);
+  resultadoComplemento = signal<ComplementoResultado | null>(null);
   arrastando = signal(false);
   analisando = signal(false);
   importando = signal(false);
@@ -376,12 +493,15 @@ export class Importar {
   nomeNova = '';
   saldoNova: number | null = null;
   contaEscolhida: number | null = null;
+  contaComplemento: number | null = null;
   nova = this.vazia();
 
   constructor() {
     effect(() => {
       this.ent.id();
       this.limpar();
+      this.ofx.set(null);
+      this.complementos.set([]);
       this.carregar();
     });
   }
@@ -389,7 +509,10 @@ export class Importar {
   carregar() {
     const eid = this.ent.id();
     if (!eid) return;
-    this.api.contas(eid).subscribe((c) => this.contas.set(c));
+    this.api.contas(eid).subscribe((c) => {
+      this.contas.set(c);
+      if (!c.some((x) => x.id === this.contaComplemento)) this.contaComplemento = c[0]?.id ?? null;
+    });
   }
 
   rotuloTipo(t: TipoConta) {
@@ -398,20 +521,28 @@ export class Importar {
 
   escolher(ev: Event) {
     const input = ev.target as HTMLInputElement;
-    this.selecionar(input.files?.[0] ?? null);
+    this.selecionar(Array.from(input.files ?? []));
     input.value = '';
   }
 
   soltar(ev: DragEvent) {
     ev.preventDefault();
     this.arrastando.set(false);
-    this.selecionar(ev.dataTransfer?.files?.[0] ?? null);
+    this.selecionar(Array.from(ev.dataTransfer?.files ?? []));
   }
 
-  private selecionar(f: File | null) {
-    const eid = this.ent.id();
+  private selecionar(arquivos: File[]) {
     this.limpar();
-    this.arquivo.set(f);
+    const ofxs = arquivos.filter((f) => extensao(f) === 'ofx');
+    const comps = arquivos.filter((f) => EXT_COMPLEMENTO.includes(extensao(f)));
+    const ignorados = arquivos.length - ofxs.length - comps.length;
+    this.ofx.set(ofxs[0] ?? null);
+    this.complementos.set(comps);
+    if (ofxs.length > 1) this.erro.set('Envie um OFX por vez; usei o primeiro.');
+    else if (ignorados)
+      this.erro.set(`${ignorados} arquivo(s) com formato não suportado foram ignorados.`);
+    const f = ofxs[0];
+    const eid = this.ent.id();
     if (!f || !eid) return;
     this.analisando.set(true);
     this.api.analisarOfx(eid, f).subscribe({
@@ -432,7 +563,7 @@ export class Importar {
 
   importar() {
     const eid = this.ent.id();
-    const f = this.arquivo();
+    const f = this.ofx();
     const a = this.analise();
     if (!eid || !f || !a) return;
     const reconhecida = a.conta_existente && !this.escolherOutra();
@@ -443,13 +574,33 @@ export class Importar {
         : { nome: this.nomeNova, saldo_inicial: this.saldoNova };
     this.erro.set('');
     this.importando.set(true);
-    this.api.importarOfxAuto(eid, f, opcoes).subscribe({
+    this.api.importarOfxAuto(eid, f, opcoes, this.complementos()).subscribe({
       next: (r) => {
         this.importando.set(false);
         this.analise.set(null);
-        this.arquivo.set(null);
+        this.ofx.set(null);
+        this.complementos.set([]);
         this.resultado.set(r);
+        this.resultadoComplemento.set(r.complemento);
         this.carregar();
+      },
+      error: (e) => {
+        this.importando.set(false);
+        this.erro.set(mensagemErro(e));
+      },
+    });
+  }
+
+  complementarSo() {
+    const eid = this.ent.id();
+    if (!eid || !this.contaComplemento) return;
+    this.erro.set('');
+    this.importando.set(true);
+    this.api.complementarConta(eid, this.contaComplemento, this.complementos()).subscribe({
+      next: (r) => {
+        this.importando.set(false);
+        this.complementos.set([]);
+        this.resultadoComplemento.set(r);
       },
       error: (e) => {
         this.importando.set(false);
@@ -476,6 +627,7 @@ export class Importar {
   private limpar() {
     this.analise.set(null);
     this.resultado.set(null);
+    this.resultadoComplemento.set(null);
     this.erro.set('');
     this.escolherOutra.set(false);
   }

@@ -151,6 +151,7 @@ class Contraparte(Base):
     """Fornecedor, cliente, seguradora, profissional etc."""
 
     __tablename__ = "contraparte"
+    __table_args__ = (UniqueConstraint("entidade_id", "documento", name="uq_contraparte_documento"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
@@ -189,9 +190,15 @@ class Transacao(Base):
     categoria_id: Mapped[int | None] = mapped_column(ForeignKey("categoria.id", ondelete="SET NULL"))
     conciliada: Mapped[bool] = mapped_column(default=False, index=True)
     importacao_id: Mapped[int | None] = mapped_column(ForeignKey("importacao.id", ondelete="SET NULL"))
+    # Quem pagou/recebeu: vem do próprio OFX (quando o banco informa) ou de XLSX/PDF complementar
+    contraparte_id: Mapped[int | None] = mapped_column(ForeignKey("contraparte.id", ondelete="SET NULL"), index=True)
+    contraparte_nome: Mapped[str | None] = mapped_column(String(160))
+    contraparte_documento: Mapped[str | None] = mapped_column(String(14))
+    complemento: Mapped[str | None] = mapped_column(String(255))  # descrição mais completa do XLSX/PDF
 
     conta: Mapped[ContaFinanceira] = relationship()
     categoria: Mapped[Categoria | None] = relationship()
+    contraparte: Mapped[Contraparte | None] = relationship()
 
 
 class Importacao(Base):

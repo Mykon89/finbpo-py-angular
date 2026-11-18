@@ -3,12 +3,12 @@ import { FormsModule } from '@angular/forms';
 import { Api } from '../core/api';
 import { mensagemErro } from '../core/auth';
 import { EntidadeAtual } from '../core/entidade-atual';
-import { BrlPipe, DataBrPipe } from '../core/formato';
+import { BrlPipe, DataBrPipe, DocumentoPipe } from '../core/formato';
 import { Categoria, Conta, Titulo, Transacao } from '../core/models';
 
 @Component({
   selector: 'app-conciliacao',
-  imports: [FormsModule, BrlPipe, DataBrPipe],
+  imports: [FormsModule, BrlPipe, DataBrPipe, DocumentoPipe],
   template: `
     <header class="cabecalho">
       <h1>Conciliação</h1>
@@ -41,7 +41,14 @@ import { Categoria, Conta, Titulo, Transacao } from '../core/models';
             <tr>
               <td>{{ t.data | dataBr }}</td>
               <td>{{ nomeConta(t.conta_id) }}</td>
-              <td>{{ t.descricao }}</td>
+              <td>
+                {{ t.descricao }}
+                @if (t.contraparte_nome || t.contraparte_documento) {
+                  <div class="sutil pequeno">
+                    {{ t.contraparte_nome }} {{ t.contraparte_documento | documento }}
+                  </div>
+                }
+              </td>
               <td class="num" [class.neg]="+t.valor < 0">{{ t.valor | brl }}</td>
               <td>
                 <select

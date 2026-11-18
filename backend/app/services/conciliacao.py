@@ -90,6 +90,11 @@ def conciliar_entidade(db: Session, entidade_id: int, tolerancia: int | None = N
     usados: set[int] = set()
     for trn in pendentes:
         cands = [t for t in candidatos(db, entidade_id, trn, tol) if t.id not in usados]
+        if len(cands) > 1 and trn.contraparte_id:
+            # Vários títulos com o mesmo valor: desempata por quem pagou/recebeu
+            mesmos = [t for t in cands if t.contraparte_id == trn.contraparte_id]
+            if mesmos:
+                cands = mesmos
         if len(cands) == 1:
             vincular(db, trn, cands[0])
             usados.add(cands[0].id)

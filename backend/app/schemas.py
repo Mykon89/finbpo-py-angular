@@ -231,11 +231,24 @@ class TransacaoLer(ORM):
     origem: OrigemTransacao
     categoria_id: int | None
     conciliada: bool
+    contraparte_id: int | None = None
+    contraparte_nome: str | None = None
+    contraparte_documento: str | None = None
+    complemento: str | None = None
 
 
 class TransacaoAtualizar(BaseModel):
     categoria_id: int | None = None
     criar_regra: bool = Field(False, description="Cria regra de categorização com a descrição")
+
+
+class ComplementoResultado(BaseModel):
+    arquivos: list[str] = []
+    linhas_lidas: int = 0
+    enriquecidas: int = 0
+    sem_correspondencia: int = 0
+    contrapartes_criadas: int = 0
+    erros: list[str] = []
 
 
 class ImportacaoResultado(BaseModel):
@@ -249,6 +262,8 @@ class ImportacaoResultado(BaseModel):
     categorizadas: int
     conciliadas: int
     saldo_extrato: Decimal | None
+    com_documento_no_ofx: int = 0
+    complemento: ComplementoResultado | None = None
 
 
 class AnaliseOFX(BaseModel):

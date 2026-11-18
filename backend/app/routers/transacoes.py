@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.schemas import (
     AnaliseOFX,
+    ComplementoResultado,
     ConciliacaoResultado,
     ContaLer,
     ImportacaoResultado,
@@ -29,7 +30,9 @@ from app.schemas import (
     VinculoManual,
 )
 from app.services.categorizacao import aplicar_regras
+from app.services.complemento import ArquivoInvalido, ler_complemento
 from app.services.conciliacao import candidatos, conciliar_entidade, vincular
+from app.services.contrapartes import ResultadoComplemento, complementar, extrair_do_ofx
 from app.services.bancos import nome_banco, normalizar_codigo
 from app.services.cnpj import so_digitos
 from app.services.ofx import ExtratoOFX, OFXInvalido, ler_ofx
@@ -174,6 +177,8 @@ def _gravar(db, entidade_id: int, conta: ContaFinanceira, extrato: ExtratoOFX, a
         novas += 1
     imp.total_lidas = len(extrato.transacoes)
     imp.total_novas = novas
+    db.flush()
+    com_doc = extrair_do_ofx(db, entidade_id, list(db.scalars(select(Transacao).where(Transacao.importacao_id == imp.id))))
     db.commit()
 
     categorizadas = aplicar_regras(db, entidade_id)
@@ -188,7 +193,40 @@ def _gravar(db, entidade_id: int, conta: ContaFinanceira, extrato: ExtratoOFX, a
         categorizadas=categorizadas,
         conciliadas=conc.conciliadas,
         saldo_extrato=extrato.saldo,
+        com_documento_no_ofx=com_doc,
     )
+
+
+async def _complementar(db, entidade_id: int, conta: ContaFinanceira, arquivos: list[UploadFile], ano: int | None):
+    res = ResultadoComplemento()
+    for arq in arquivos:
+        nome = arq.filename or "arquivo"
+        conteudo = await arq.read(TAMANHO_MAXIMO + 1)
+        if len(conteudo) > TAMANHO_MAXIMO:
+            res.erros.append(f"{nome}: maior que 10 MB")
+            continue
+        try:
+            linhas = ler_complemento(nome, conteudo, ano)
+        except ArquivoInvalido as e:
+            res.erros.append(f"{nome}: {e}")
+            continue
+        res.arquivos.append(nome)
+        # Cada arquivo é casado separadamente: XLSX e PDF do mesmo período se somam
+        r = complementar(db, entidade_id, conta, linhas)
+        res.linhas_lidas += r.linhas_lidas
+        res.enriquecidas += r.enriquecidas
+        res.sem_correspondencia += r.sem_correspondencia
+        res.contrapartes_criadas += r.contrapartes_criadas
+    aplicar_regras(db, entidade_id)
+    conciliar_entidade(db, entidade_id)
+    return ComplementoResultado(**res.__dict__)
+
+
+@router.post("/contas/{conta_id}/complementar", response_model=ComplementoResultado)
+async def complementar_conta(conta_id: int, arquivos: list[UploadFile], entidade: EntidadeDep, db: DB):
+    """Completa lançamentos já importados com nome/CPF/CNPJ vindos de XLSX, XLS, CSV ou PDF do banco."""
+    conta = obter_do_escopo(db, ContaFinanceira, conta_id, entidade.id)
+    return await _complementar(db, entidade.id, conta, arquivos, None)
 
 
 @router.post("/contas/{conta_id}/importar-ofx", response_model=ImportacaoResultado)
@@ -233,9 +271,14 @@ async def importar_ofx_auto(
     conta_id: Annotated[int | None, Form()] = None,
     nome: Annotated[str | None, Form(max_length=120)] = None,
     saldo_inicial: Annotated[Decimal | None, Form()] = None,
+    complementos: list[UploadFile] | None = None,
 ):
-    """Importa o OFX na conta informada, na conta já reconhecida pelo número ou numa conta nova."""
+    """Importa o OFX na conta informada, na conta já reconhecida pelo número ou numa conta nova.
+
+    `complementos`: XLSX/XLS/CSV/PDF do mesmo período, usados para completar nome e CPF/CNPJ.
+    """
     extrato = await _ler_arquivo(arquivo)
+    ano = (extrato.fim or extrato.inicio).year if (extrato.fim or extrato.inicio) else None
     if conta_id:
         conta = obter_do_escopo(db, ContaFinanceira, conta_id, entidade.id)
     else:
@@ -256,8 +299,14 @@ async def importar_ofx_auto(
             db.add(conta)
             db.flush()
             resultado = _gravar(db, entidade.id, conta, extrato, arquivo.filename or "extrato.ofx")
-            return resultado.model_copy(update={"conta_criada": True})
-    return _gravar(db, entidade.id, conta, extrato, arquivo.filename or "extrato.ofx")
+            resultado.conta_criada = True
+            if complementos:
+                resultado.complemento = await _complementar(db, entidade.id, conta, complementos, ano)
+            return resultado
+    resultado = _gravar(db, entidade.id, conta, extrato, arquivo.filename or "extrato.ofx")
+    if complementos:
+        resultado.complemento = await _complementar(db, entidade.id, conta, complementos, ano)
+    return resultado
 
 
 @router.post("/conciliacao/automatica", response_model=ConciliacaoResultado)

@@ -4,6 +4,7 @@ import {
   AnaliseOFX,
   Aging,
   Categoria,
+  ComplementoResultado,
   Conta,
   DadosCNPJ,
   DRE,
@@ -78,6 +79,7 @@ export class Api {
     eid: number,
     arquivo: File,
     opcoes: { conta_id?: number | null; nome?: string; saldo_inicial?: string | number | null },
+    complementos: File[] = [],
   ) {
     const form = new FormData();
     form.append('arquivo', arquivo);
@@ -89,7 +91,16 @@ export class Api {
       opcoes.saldo_inicial !== ''
     )
       form.append('saldo_inicial', String(opcoes.saldo_inicial));
+    complementos.forEach((f) => form.append('complementos', f));
     return this.http.post<ImportacaoResultado>(`${this.e(eid)}/ofx/importar`, form);
+  }
+  complementarConta(eid: number, contaId: number, arquivos: File[]) {
+    const form = new FormData();
+    arquivos.forEach((f) => form.append('arquivos', f));
+    return this.http.post<ComplementoResultado>(
+      `${this.e(eid)}/contas/${contaId}/complementar`,
+      form,
+    );
   }
 
   // títulos
@@ -117,7 +128,13 @@ export class Api {
   // transações e conciliação
   transacoes(
     eid: number,
-    filtro: { conciliada?: boolean; sem_categoria?: boolean; conta_id?: number },
+    filtro: {
+      conciliada?: boolean;
+      sem_categoria?: boolean;
+      conta_id?: number | null;
+      data_de?: string;
+      data_ate?: string;
+    },
   ) {
     return this.http.get<Transacao[]>(`${this.e(eid)}/transacoes`, { params: params(filtro) });
   }

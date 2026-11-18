@@ -103,6 +103,19 @@ export interface Transacao {
   origem: string;
   categoria_id: number | null;
   conciliada: boolean;
+  contraparte_id: number | null;
+  contraparte_nome: string | null;
+  contraparte_documento: string | null;
+  complemento: string | null;
+}
+
+export interface ComplementoResultado {
+  arquivos: string[];
+  linhas_lidas: number;
+  enriquecidas: number;
+  sem_correspondencia: number;
+  contrapartes_criadas: number;
+  erros: string[];
 }
 
 export interface ImportacaoResultado {
@@ -116,6 +129,8 @@ export interface ImportacaoResultado {
   categorizadas: number;
   conciliadas: number;
   saldo_extrato: string | null;
+  com_documento_no_ofx: number;
+  complemento: ComplementoResultado | null;
 }
 
 export interface AnaliseOFX {
