@@ -7,6 +7,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
+from app import mcp_server
+from app.config import settings
 from app.main import app
 
 
@@ -28,6 +30,8 @@ def client():
             yield s
 
     app.dependency_overrides[get_db] = _db
+    mcp_server.abrir_sessao = Sessao
+    settings.mcp_token = "token-de-teste"
     with TestClient(app) as c:
         c.post("/api/auth/primeiro-acesso", json={"nome": "Admin", "email": "admin@finbpo.dev", "senha": "senha-forte"})
         token = c.post("/api/auth/login", data={"username": "admin@finbpo.dev", "password": "senha-forte"}).json()

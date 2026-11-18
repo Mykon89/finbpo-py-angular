@@ -12,7 +12,8 @@ Backend em **Python (FastAPI)** e frontend em **Angular**. A arquitetura complet
 - **Conta criada a partir do primeiro extrato**: banco, agência e conta lidos do OFX, saldo inicial calculado para bater com o banco e reconhecimento automático nos extratos seguintes
 - **XLSX, XLS, CSV e PDF do banco como complemento do OFX**: nome e CPF/CNPJ de quem pagou/recebeu, casados pela data e valor; clientes e fornecedores criados automaticamente
 - Tela de lançamentos com busca por descrição, nome ou CPF/CNPJ
-- Regras de categorização por trecho da descrição
+- Regras de categorização por CPF/CNPJ da contraparte ou trecho da descrição, e **sugestões aprendidas com o histórico**
+- **Conector MCP para o Claude** categorizar e analisar usando a sua assinatura (ver [`docs/CLAUDE_MCP.md`](docs/CLAUDE_MCP.md))
 - Conciliação automática (mesmo valor, vencimento ± 5 dias, só quando há um único candidato) e manual
 - DRE gerencial (regime de caixa) e aging de contas a pagar e a receber
 - Login com JWT

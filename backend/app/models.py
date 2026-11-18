@@ -188,6 +188,8 @@ class Transacao(Base):
     hash: Mapped[str] = mapped_column(String(64))  # deduplicação
     origem: Mapped[OrigemTransacao] = mapped_column(_enum(OrigemTransacao))
     categoria_id: Mapped[int | None] = mapped_column(ForeignKey("categoria.id", ondelete="SET NULL"))
+    # Como a categoria foi definida: manual, regra, sugestao (aprendizado interno) ou ia (Claude via MCP)
+    categoria_origem: Mapped[str | None] = mapped_column(String(10))
     conciliada: Mapped[bool] = mapped_column(default=False, index=True)
     importacao_id: Mapped[int | None] = mapped_column(ForeignKey("importacao.id", ondelete="SET NULL"))
     # Quem pagou/recebeu: vem do próprio OFX (quando o banco informa) ou de XLSX/PDF complementar
@@ -260,6 +262,8 @@ class RegraCategorizacao(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
-    padrao: Mapped[str] = mapped_column(String(160))  # trecho da descrição (case-insensitive)
+    padrao: Mapped[str | None] = mapped_column(String(160))  # trecho da descrição (case-insensitive)
+    # Regra por quem pagou/recebeu: mais confiável que texto (ex.: todo Pix para o CNPJ X é "Contabilidade")
+    contraparte_id: Mapped[int | None] = mapped_column(ForeignKey("contraparte.id", ondelete="CASCADE"), index=True)
     categoria_id: Mapped[int] = mapped_column(ForeignKey("categoria.id", ondelete="CASCADE"))
     prioridade: Mapped[int] = mapped_column(default=100)  # menor = avaliada primeiro

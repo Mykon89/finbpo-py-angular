@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:4200"]
     # Tolerância (dias) entre vencimento e data do extrato na conciliação automática
     conciliacao_tolerancia_dias: int = 5
+    # Token do conector MCP (Claude Desktop / Claude Code). Vazio = conector desligado.
+    mcp_token: str = ""
 
 
 settings = Settings()

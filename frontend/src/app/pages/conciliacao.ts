@@ -4,7 +4,7 @@ import { Api } from '../core/api';
 import { mensagemErro } from '../core/auth';
 import { EntidadeAtual } from '../core/entidade-atual';
 import { BrlPipe, DataBrPipe, DocumentoPipe } from '../core/formato';
-import { Categoria, Conta, Titulo, Transacao } from '../core/models';
+import { Categoria, Conta, Sugestao, Titulo, Transacao } from '../core/models';
 
 @Component({
   selector: 'app-conciliacao',
@@ -12,9 +12,16 @@ import { Categoria, Conta, Titulo, Transacao } from '../core/models';
   template: `
     <header class="cabecalho">
       <h1>Conciliação</h1>
-      <button class="primario" type="button" (click)="automatica()">
-        Conciliar automaticamente
-      </button>
+      <div class="botoes">
+        @if (pendentesComSugestao().length) {
+          <button type="button" (click)="aceitarTodas()">
+            Aceitar {{ pendentesComSugestao().length }} sugestões de categoria
+          </button>
+        }
+        <button class="primario" type="button" (click)="automatica()">
+          Conciliar automaticamente
+        </button>
+      </div>
     </header>
     @if (aviso()) {
       <p class="aviso">{{ aviso() }}</p>
@@ -61,6 +68,16 @@ import { Categoria, Conta, Titulo, Transacao } from '../core/models';
                     <option [ngValue]="c.id">{{ c.nome }}</option>
                   }
                 </select>
+                @if (!t.categoria_id && sugestoes().get(t.id); as s) {
+                  <button type="button" class="sugestao" [title]="s.motivo" (click)="aceitar(t, s)">
+                    Sugestão: {{ s.categoria }} ({{ pct(s.confianca) }}%) · aceitar
+                  </button>
+                }
+                @if (t.categoria_origem === 'ia' || t.categoria_origem === 'regra') {
+                  <div class="sutil pequeno">
+                    por {{ t.categoria_origem === 'ia' ? 'Claude' : 'regra' }}
+                  </div>
+                }
               </td>
               <td class="acoes">
                 <button type="button" (click)="verCandidatos(t)">Títulos</button>
@@ -119,6 +136,21 @@ import { Categoria, Conta, Titulo, Transacao } from '../core/models';
       padding: 8px 12px;
       border-radius: 6px;
     }
+    .botoes {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .sugestao {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.75rem;
+      padding: 3px 8px;
+      border-style: dashed;
+      color: var(--primaria);
+      background: transparent;
+      text-align: left;
+    }
     .regra {
       flex-direction: row;
       gap: 6px;
@@ -138,6 +170,10 @@ export class Conciliacao {
   aviso = signal('');
   salvarRegra = true;
   pendentes = computed(() => this.transacoes().filter((t) => !t.conciliada));
+  sugestoes = signal(new Map<number, Sugestao>());
+  pendentesComSugestao = computed(() =>
+    this.pendentes().filter((t) => !t.categoria_id && this.sugestoes().has(t.id)),
+  );
 
   constructor() {
     effect(() => {
@@ -153,6 +189,9 @@ export class Conciliacao {
     const eid = this.ent.id();
     if (!eid) return;
     this.api.transacoes(eid, { conciliada: false }).subscribe((t) => this.transacoes.set(t));
+    this.api
+      .sugestoes(eid)
+      .subscribe((l) => this.sugestoes.set(new Map(l.map((s) => [s.transacao_id, s]))));
   }
 
   nomeConta(id: number) {
@@ -174,9 +213,30 @@ export class Conciliacao {
     this.api
       .categorizar(this.ent.id()!, t.id, categoriaId, this.salvarRegra && !!categoriaId)
       .subscribe({
-        next: (n) => this.transacoes.update((l) => l.map((x) => (x.id === n.id ? n : x))),
+        next: () => this.carregar(),
         error: (e) => this.aviso.set(mensagemErro(e)),
       });
+  }
+
+  pct(v: number) {
+    return Math.round(v * 100);
+  }
+
+  aceitar(t: Transacao, s: Sugestao) {
+    this.categorizar(t, s.categoria_id);
+  }
+
+  aceitarTodas() {
+    const eid = this.ent.id();
+    if (!eid) return;
+    const itens = this.pendentesComSugestao().map((t) => ({
+      transacao_id: t.id,
+      categoria_id: this.sugestoes().get(t.id)!.categoria_id,
+    }));
+    this.api.aplicarCategorias(eid, itens).subscribe((r) => {
+      this.aviso.set(`${r.alteradas} lançamentos categorizados pelas sugestões.`);
+      this.carregar();
+    });
   }
 
   verCandidatos(t: Transacao) {

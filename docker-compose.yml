@@ -20,6 +20,7 @@ services:
       DATABASE_URL: postgresql+psycopg://finbpo:${POSTGRES_PASSWORD:-finbpo}@db:5432/finbpo
       SECRET_KEY: ${SECRET_KEY:?defina SECRET_KEY no arquivo .env}
       CORS_ORIGINS: '["http://localhost:8080"]'
+      MCP_TOKEN: ${MCP_TOKEN:-}
     depends_on:
       db:
         condition: service_healthy

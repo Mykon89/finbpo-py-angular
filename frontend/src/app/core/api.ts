@@ -11,6 +11,7 @@ import {
   Entidade,
   ImportacaoResultado,
   StatusTitulo,
+  Sugestao,
   TipoTitulo,
   Titulo,
   Transacao,
@@ -142,6 +143,15 @@ export class Api {
     return this.http.patch<Transacao>(`${this.e(eid)}/transacoes/${id}`, {
       categoria_id,
       criar_regra,
+    });
+  }
+  sugestoes(eid: number) {
+    return this.http.get<Sugestao[]>(`${this.e(eid)}/categorizacao/sugestoes`);
+  }
+  aplicarCategorias(eid: number, itens: { transacao_id: number; categoria_id: number }[]) {
+    return this.http.post<{ alteradas: number }>(`${this.e(eid)}/categorizacao/aplicar`, {
+      itens,
+      origem: 'sugestao',
     });
   }
   ignorar(eid: number, id: number) {

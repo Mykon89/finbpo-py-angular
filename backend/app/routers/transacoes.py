@@ -12,7 +12,6 @@ from app.models import (
     Entidade,
     Importacao,
     OrigemTransacao,
-    RegraCategorizacao,
     StatusTitulo,
     TipoConta,
     Titulo,
@@ -22,14 +21,16 @@ from app.schemas import (
     AnaliseOFX,
     ComplementoResultado,
     ConciliacaoResultado,
+    Categorizacao,
     ContaLer,
+    SugestaoLer,
     ImportacaoResultado,
     TituloLer,
     TransacaoAtualizar,
     TransacaoLer,
     VinculoManual,
 )
-from app.services.categorizacao import aplicar_regras
+from app.services.categorizacao import aplicar_regras, criar_regra_de, sugerir
 from app.services.complemento import ArquivoInvalido, ler_complemento
 from app.services.conciliacao import candidatos, conciliar_entidade, vincular
 from app.services.contrapartes import ResultadoComplemento, complementar, extrair_do_ofx
@@ -73,10 +74,41 @@ def atualizar(transacao_id: int, dados: TransacaoAtualizar, entidade: EntidadeDe
     if dados.categoria_id is not None:
         obter_do_escopo(db, Categoria, dados.categoria_id, entidade.id)
     trn.categoria_id = dados.categoria_id
+    trn.categoria_origem = "manual" if dados.categoria_id else None
     if dados.criar_regra and dados.categoria_id:
-        db.add(RegraCategorizacao(entidade_id=entidade.id, padrao=trn.descricao[:160], categoria_id=dados.categoria_id))
+        criar_regra_de(db, entidade.id, trn, dados.categoria_id)
+        db.flush()
+        aplicar_regras(db, entidade.id)  # aplica a nova regra aos demais pendentes
     db.commit()
     return trn
+
+
+@router.get("/categorizacao/sugestoes", response_model=list[SugestaoLer])
+def sugestoes(entidade: EntidadeDep, db: DB):
+    """Sugestões aprendidas com o histórico (mesma contraparte ou descrição parecida). Não grava nada."""
+    return [SugestaoLer(**s.__dict__) for s in sugerir(db, entidade.id)]
+
+
+@router.post("/categorizacao/aplicar")
+def aplicar_categorias(dados: Categorizacao, entidade: EntidadeDep, db: DB):
+    """Grava categorias em lote (aceite de sugestões, ou categorização feita pelo Claude via MCP)."""
+    return {"alteradas": categorizar_lote(db, entidade.id, dados.itens, dados.origem)}
+
+
+def categorizar_lote(db, entidade_id: int, itens, origem: str) -> int:
+    alteradas = 0
+    for item in itens:
+        trn = obter_do_escopo(db, Transacao, item.transacao_id, entidade_id)
+        obter_do_escopo(db, Categoria, item.categoria_id, entidade_id)
+        trn.categoria_id = item.categoria_id
+        trn.categoria_origem = origem
+        if item.criar_regra:
+            criar_regra_de(db, entidade_id, trn, item.categoria_id)
+            db.flush()
+        alteradas += 1
+    db.commit()
+    aplicar_regras(db, entidade_id)
+    return alteradas
 
 
 @router.post("/transacoes/{transacao_id}/ignorar", response_model=TransacaoLer)

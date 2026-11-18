@@ -83,7 +83,18 @@ function primeiroDiaMes(): string {
                   <span class="sutil">—</span>
                 }
               </td>
-              <td>{{ nomeCategoria(t.categoria_id) }}</td>
+              <td>
+                {{ nomeCategoria(t.categoria_id) }}
+                @if (t.categoria_id && t.categoria_origem && t.categoria_origem !== 'manual') {
+                  <div class="sutil pequeno">
+                    {{
+                      { ia: 'por Claude', regra: 'por regra', sugestao: 'sugestão aceita' }[
+                        t.categoria_origem
+                      ]
+                    }}
+                  </div>
+                }
+              </td>
               <td class="num" [class.neg]="+t.valor < 0">{{ t.valor | brl }}</td>
               <td>
                 <span class="status" [attr.data-s]="t.conciliada ? 'pago' : 'aberto'">{{

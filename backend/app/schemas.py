@@ -151,7 +151,8 @@ class ContaSaldo(ContaLer):
 
 
 class RegraCriar(BaseModel):
-    padrao: str = Field(min_length=2)
+    padrao: str | None = Field(None, min_length=2)
+    contraparte_id: int | None = None
     categoria_id: int
     prioridade: int = 100
 
@@ -159,7 +160,8 @@ class RegraCriar(BaseModel):
 class RegraLer(ORM):
     id: int
     entidade_id: int
-    padrao: str
+    padrao: str | None
+    contraparte_id: int | None = None
     categoria_id: int
     prioridade: int
 
@@ -235,11 +237,31 @@ class TransacaoLer(ORM):
     contraparte_nome: str | None = None
     contraparte_documento: str | None = None
     complemento: str | None = None
+    categoria_origem: str | None = None
 
 
 class TransacaoAtualizar(BaseModel):
     categoria_id: int | None = None
     criar_regra: bool = Field(False, description="Cria regra de categorização com a descrição")
+
+
+class SugestaoLer(BaseModel):
+    transacao_id: int
+    categoria_id: int
+    categoria: str
+    confianca: float
+    motivo: str
+
+
+class ItemCategorizacao(BaseModel):
+    transacao_id: int
+    categoria_id: int
+    criar_regra: bool = False
+
+
+class Categorizacao(BaseModel):
+    itens: list[ItemCategorizacao] = Field(min_length=1, max_length=1000)
+    origem: str = Field("sugestao", pattern="^(manual|sugestao|ia)$")
 
 
 class ComplementoResultado(BaseModel):

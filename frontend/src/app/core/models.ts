@@ -107,6 +107,15 @@ export interface Transacao {
   contraparte_nome: string | null;
   contraparte_documento: string | null;
   complemento: string | null;
+  categoria_origem: 'manual' | 'regra' | 'sugestao' | 'ia' | null;
+}
+
+export interface Sugestao {
+  transacao_id: number;
+  categoria_id: number;
+  categoria: string;
+  confianca: number;
+  motivo: string;
 }
 
 export interface ComplementoResultado {

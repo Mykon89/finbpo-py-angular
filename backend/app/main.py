@@ -1,11 +1,21 @@
+from contextlib import asynccontextmanager
+
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import auth, cnpj, entidades, relatorios, titulos, transacoes
+from app.mcp_server import app_mcp, ciclo_de_vida
 from app.security import usuario_atual
 
-app = FastAPI(title="FinBPO", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    async with ciclo_de_vida():
+        yield
+
+
+app = FastAPI(title="FinBPO", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -25,3 +35,7 @@ app.include_router(api)
 @app.get("/api/saude", tags=["infra"])
 def saude():
     return {"status": "ok"}
+
+
+# Conector MCP para o Claude em /mcp (montado por último: as rotas da API têm prioridade)
+app.mount("/", app_mcp)

@@ -194,6 +194,10 @@ def listar_regras(entidade: EntidadeDep, db: DB):
 @router.post("/{entidade_id}/regras", response_model=RegraLer, status_code=201)
 def criar_regra(dados: RegraCriar, entidade: EntidadeDep, db: DB):
     obter_do_escopo(db, Categoria, dados.categoria_id, entidade.id)
+    if not dados.padrao and not dados.contraparte_id:
+        raise HTTPException(422, "Informe o trecho da descrição ou a contraparte")
+    if dados.contraparte_id:
+        obter_do_escopo(db, Contraparte, dados.contraparte_id, entidade.id)
     regra = RegraCategorizacao(entidade_id=entidade.id, **dados.model_dump())
     db.add(regra)
     db.commit()
