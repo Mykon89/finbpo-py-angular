@@ -27,6 +27,7 @@ import { SEGMENTOS } from '../core/models';
         <a routerLink="/titulos/receber" routerLinkActive="ativo">Contas a receber</a>
         <a routerLink="/recorrencias" routerLinkActive="ativo">Recorrências</a>
         <a routerLink="/comissoes" routerLinkActive="ativo">Comissões</a>
+        <a routerLink="/previsao" routerLinkActive="ativo">Previsão de recebimentos</a>
         <a routerLink="/importar" routerLinkActive="ativo">Contas e extratos</a>
         <a routerLink="/lancamentos" routerLinkActive="ativo">Lançamentos</a>
         <a routerLink="/conciliacao" routerLinkActive="ativo">Conciliação</a>

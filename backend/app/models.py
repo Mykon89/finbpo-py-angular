@@ -145,6 +145,10 @@ class Entidade(Base):
     municipio: Mapped[str | None] = mapped_column(String(120))
     uf: Mapped[str | None] = mapped_column(String(2))
 
+    # Planilha "FECHAMENTO DE PROPOSTAS" (Google Sheets) usada no vínculo e em "novo negócio"
+    fechamento_planilha_id: Mapped[str | None] = mapped_column(String(120))
+    fechamento_sincronizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     contas: Mapped[list["ContaFinanceira"]] = relationship(back_populates="entidade")
 
 
@@ -367,5 +371,33 @@ class Comissao(Base):
     observacao: Mapped[str | None] = mapped_column(String(255))
     parcela: Mapped[int | None] = mapped_column()
     parcela_texto: Mapped[str | None] = mapped_column(String(60))  # ex.: "2/6", "1 e 2", "43 a 91"
+    novo_negocio: Mapped[bool | None] = mapped_column()  # 1ª comissão de um seguro novo (não renovação)
     prevista: Mapped[Decimal | None] = mapped_column(Dinheiro)
     hash: Mapped[str] = mapped_column(String(64), index=True)  # deduplicação na reimportação
+
+
+class PropostaFechamento(Base):
+    """Linha da planilha FECHAMENTO DE PROPOSTAS (uma aba por mês)."""
+
+    __tablename__ = "proposta_fechamento"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
+    ano: Mapped[int] = mapped_column()
+    mes: Mapped[int] = mapped_column()  # mês da aba
+    aba: Mapped[str] = mapped_column(String(20))
+    linha: Mapped[int] = mapped_column()
+    data_email: Mapped[date | None] = mapped_column(Date)
+    vigencia_inicio: Mapped[date | None] = mapped_column(Date)
+    tipo: Mapped[str | None] = mapped_column(String(40))  # Seguro Novo / Renovação / Endosso
+    seguradora: Mapped[str] = mapped_column(String(60), index=True)  # normalizada (AZUL→PORTO, ALIRO→YELUM...)
+    ramo: Mapped[str | None] = mapped_column(String(60))
+    descricao: Mapped[str | None] = mapped_column(String(120))
+    cliente: Mapped[str] = mapped_column(String(200))
+    produtor: Mapped[str | None] = mapped_column(String(60))
+    origem: Mapped[str | None] = mapped_column(String(60))
+    parceiro: Mapped[str | None] = mapped_column(String(60))
+    premio: Mapped[Decimal | None] = mapped_column(Dinheiro)
+    com_bruta: Mapped[Decimal | None] = mapped_column(Dinheiro)
+    emissao: Mapped[str | None] = mapped_column(String(30))  # EMITIDA / CANCELADA / ...
+    recebido: Mapped[Decimal | None] = mapped_column(Dinheiro)

@@ -317,6 +317,7 @@ export interface Comissao {
   observacao: string | null;
   parcela: number | null;
   parcela_texto: string | null;
+  novo_negocio?: boolean | null;
 }
 
 export interface ExtratoComissao {
@@ -383,4 +384,40 @@ export interface ExtratoImportado {
   divergencias: string[];
   avisos: string[];
   erro: string | null;
+}
+
+export interface FechamentoStatus {
+  planilha_id: string | null;
+  sincronizado_em: string | null;
+  propostas: number;
+  conta_servico: boolean;
+  abas: string[];
+  avisos: string[];
+  novos_negocios: number | null;
+}
+
+export interface ItemPrevisao {
+  tipo: 'parcela' | 'recorrente' | 'proposta';
+  mes: string;
+  seguradora: string;
+  cliente: string;
+  apolice: string | null;
+  ramo: string | null;
+  valor: string;
+  detalhe: string;
+}
+
+export interface MesPrevisao {
+  mes: string;
+  total: string;
+  parcelas: string;
+  recorrentes: string;
+  propostas: string;
+  por_seguradora: Record<string, string>;
+}
+
+export interface Previsao {
+  meses: MesPrevisao[];
+  itens: ItemPrevisao[];
+  atrasados: ItemPrevisao[];
 }

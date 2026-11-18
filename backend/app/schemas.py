@@ -445,6 +445,7 @@ class ComissaoLer(ORM):
     observacao: str | None
     parcela: int | None
     parcela_texto: str | None = None
+    novo_negocio: bool | None = None
 
 
 class ComissaoAtualizar(BaseModel):
@@ -519,3 +520,43 @@ class ExtratoImportado(BaseModel):
     divergencias: list[str] = []
     avisos: list[str] = []
     erro: str | None = None
+
+
+class FechamentoConfig(BaseModel):
+    planilha: str | None = Field(None, description="Link ou ID da planilha FECHAMENTO DE PROPOSTAS no Google Sheets")
+
+
+class FechamentoStatus(BaseModel):
+    planilha_id: str | None
+    sincronizado_em: datetime | None
+    propostas: int
+    conta_servico: bool
+    abas: list[str] = []
+    avisos: list[str] = []
+    novos_negocios: int | None = None
+
+
+class ItemPrevisaoLer(BaseModel):
+    tipo: str
+    mes: str
+    seguradora: str
+    cliente: str
+    apolice: str | None
+    ramo: str | None
+    valor: Decimal
+    detalhe: str
+
+
+class MesPrevisao(BaseModel):
+    mes: str
+    total: Decimal
+    parcelas: Decimal
+    recorrentes: Decimal
+    propostas: Decimal
+    por_seguradora: dict[str, Decimal]
+
+
+class PrevisaoLer(BaseModel):
+    meses: list[MesPrevisao]
+    itens: list[ItemPrevisaoLer]
+    atrasados: list[ItemPrevisaoLer]

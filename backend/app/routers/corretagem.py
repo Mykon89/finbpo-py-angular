@@ -1,6 +1,8 @@
 """Comissões de seguradoras (BASE/RECEBER da planilha), recorrências e painel do contas a pagar."""
 
 import calendar
+
+import httpx
 from dataclasses import asdict
 from datetime import date, timedelta
 from decimal import Decimal
@@ -28,6 +30,9 @@ from app.schemas import (
     Comparativo,
     ExtratoComissaoLer,
     ExtratoImportado,
+    FechamentoConfig,
+    FechamentoStatus,
+    PrevisaoLer,
     ImportacaoPlanilha,
     LinhaComparativo,
     PainelPagar,
@@ -36,7 +41,9 @@ from app.schemas import (
     RecorrenciaLer,
     TituloLer,
 )
-from app.services import comissoes, extratos_seguradoras, planilha, recorrencias
+from app.config import settings
+from app.models import PropostaFechamento
+from app.services import comissoes, extratos_seguradoras, fechamento, planilha, previsao, recorrencias
 
 router = APIRouter(prefix="/entidades/{entidade_id}", tags=["corretagem"])
 
@@ -64,6 +71,7 @@ async def importar_planilha(arquivo: UploadFile, entidade: EntidadeDep, db: DB):
         raise HTTPException(422, "Envie a planilha em .xlsx (Google Sheets: Arquivo → Fazer download → .xlsx)")
     try:
         res = planilha.importar(db, entidade.id, await arquivo.read())
+        previsao.classificar_novos(db, entidade.id)
     except (KeyError, ValueError, OSError) as e:
         raise HTTPException(422, f"Não consegui ler a planilha: {e}") from e
     return ImportacaoPlanilha(**asdict(res))
@@ -82,7 +90,58 @@ async def importar_extratos(arquivos: list[UploadFile], entidade: EntidadeDep, d
             saida.append(ExtratoImportado(arquivo=nome, erro=str(e)))
             continue
         saida += [ExtratoImportado(**asdict(r)) for r in comissoes.gravar(db, entidade.id, lidos, nome)]
+    previsao.classificar_novos(db, entidade.id)
     return saida
+
+
+# --- FECHAMENTO DE PROPOSTAS (Google Sheets)
+def _status(db, entidade, leitura=None, novos=None) -> FechamentoStatus:
+    qtd = db.scalar(select(func.count(PropostaFechamento.id)).where(PropostaFechamento.entidade_id == entidade.id)) or 0
+    return FechamentoStatus(
+        planilha_id=entidade.fechamento_planilha_id, sincronizado_em=entidade.fechamento_sincronizado_em, propostas=qtd,
+        conta_servico=bool(settings.google_service_account_file), abas=leitura.abas if leitura else [],
+        avisos=leitura.avisos if leitura else [], novos_negocios=novos,
+    )
+
+
+@router.get("/fechamento", response_model=FechamentoStatus)
+def status_fechamento(entidade: EntidadeDep, db: DB):
+    return _status(db, entidade)
+
+
+@router.put("/fechamento", response_model=FechamentoStatus)
+def configurar_fechamento(dados: FechamentoConfig, entidade: EntidadeDep, db: DB):
+    entidade.fechamento_planilha_id = fechamento.extrair_id(dados.planilha) if dados.planilha else None
+    db.commit()
+    return _status(db, entidade)
+
+
+@router.post("/fechamento/sincronizar", response_model=FechamentoStatus)
+def sincronizar_fechamento(entidade: EntidadeDep, db: DB):
+    """Baixa a planilha do Google e atualiza as propostas (vínculo e novo negócio passam a usá-las)."""
+    try:
+        leitura = fechamento.sincronizar(db, entidade)
+    except (ValueError, OSError, httpx.HTTPError) as e:
+        raise HTTPException(422, str(e)) from e
+    return _status(db, entidade, leitura, previsao.classificar_novos(db, entidade.id))
+
+
+@router.post("/fechamento/importar", response_model=FechamentoStatus)
+async def importar_fechamento(arquivo: UploadFile, entidade: EntidadeDep, db: DB):
+    """Alternativa sem Google: sobe o .xlsx da planilha FECHAMENTO."""
+    try:
+        leitura = fechamento.ler_xlsx(await arquivo.read())
+    except (KeyError, ValueError, OSError) as e:
+        raise HTTPException(422, f"Não consegui ler a planilha: {e}") from e
+    fechamento.gravar(db, entidade, leitura)
+    return _status(db, entidade, leitura, previsao.classificar_novos(db, entidade.id))
+
+
+@router.get("/comissoes/previsao", response_model=PrevisaoLer)
+def previsao_recebimentos(entidade: EntidadeDep, db: DB, meses: int = Query(6, ge=1, le=24), hoje: date | None = None):
+    """Parcelas restantes (n/total), comissões recorrentes (saúde/odonto/vida) e propostas fechadas ainda sem comissão."""
+    p = previsao.prever(db, entidade.id, meses, hoje)
+    return PrevisaoLer(meses=p.meses, itens=[asdict(i) for i in p.itens], atrasados=[asdict(i) for i in p.atrasados])
 
 
 # --- comissões
@@ -148,13 +207,15 @@ def comparativo(entidade: EntidadeDep, db: DB, mes: str):
     """Mês escolhido x mês anterior, por ramo e por seguradora (como a aba COMPARATIVO)."""
     ini, fim = _mes(mes)
     ini_ant = (ini - timedelta(days=1)).replace(day=1)
+    if db.scalar(select(Comissao.id).where(Comissao.entidade_id == entidade.id, Comissao.novo_negocio.is_(None)).limit(1)):
+        previsao.classificar_novos(db, entidade.id)  # dados de antes desta versão
     ramo_ant = planilha.resumo_por(db, entidade.id, Comissao.ramo, ini_ant, ini)
     ramo_atu = planilha.resumo_por(db, entidade.id, Comissao.ramo, ini, fim)
     seg_ant = planilha.resumo_por(db, entidade.id, Comissao.seguradora, ini_ant, ini)
     seg_atu = planilha.resumo_por(db, entidade.id, Comissao.seguradora, ini, fim)
     no_mes = (Comissao.entidade_id == entidade.id, Comissao.data >= ini, Comissao.data < fim)
     novos_qtd, novos_valor = db.execute(
-        select(func.count(Comissao.id), func.coalesce(func.sum(Comissao.bruta), 0)).where(*no_mes, Comissao.parcela == 1)
+        select(func.count(Comissao.id), func.coalesce(func.sum(Comissao.bruta), 0)).where(*no_mes, Comissao.novo_negocio.is_(True))
     ).one()
     sem_vinculo = db.scalar(
         select(func.count(Comissao.id)).where(*no_mes, Comissao.produtor.is_(None), Comissao.parceiro.is_(None))

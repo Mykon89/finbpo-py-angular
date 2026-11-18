@@ -17,3 +17,7 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Chaves (conta de serviço do Google etc.)
+credenciais/*
+!credenciais/.gitkeep

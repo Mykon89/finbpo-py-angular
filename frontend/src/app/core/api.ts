@@ -9,6 +9,8 @@ import {
   ComplementoResultado,
   ExtratoComissao,
   ExtratoImportado,
+  FechamentoStatus,
+  Previsao,
   ImportacaoPlanilha,
   PainelPagar,
   Recorrencia,
@@ -129,6 +131,25 @@ export class Api {
     const form = new FormData();
     form.append('arquivo', arquivo);
     return this.http.post<ImportacaoPlanilha>(`${this.e(eid)}/importar-planilha`, form);
+  }
+  fechamento(eid: number) {
+    return this.http.get<FechamentoStatus>(`${this.e(eid)}/fechamento`);
+  }
+  configurarFechamento(eid: number, planilha: string | null) {
+    return this.http.put<FechamentoStatus>(`${this.e(eid)}/fechamento`, { planilha });
+  }
+  sincronizarFechamento(eid: number) {
+    return this.http.post<FechamentoStatus>(`${this.e(eid)}/fechamento/sincronizar`, {});
+  }
+  importarFechamento(eid: number, arquivo: File) {
+    const form = new FormData();
+    form.append('arquivo', arquivo);
+    return this.http.post<FechamentoStatus>(`${this.e(eid)}/fechamento/importar`, form);
+  }
+  previsao(eid: number, meses: number) {
+    return this.http.get<Previsao>(`${this.e(eid)}/comissoes/previsao`, {
+      params: params({ meses }),
+    });
   }
   importarExtratos(eid: number, arquivos: File[]) {
     const form = new FormData();

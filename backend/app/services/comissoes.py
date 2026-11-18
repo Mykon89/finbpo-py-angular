@@ -9,7 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import Comissao, ExtratoComissao
+from app.models import Comissao, ExtratoComissao, PropostaFechamento
+from app.services.fechamento import norm_seguradora
 from app.services.extratos_seguradoras import Extrato, parcela_texto
 from app.services.planilha import chave_comissao
 
@@ -115,12 +116,12 @@ class Vinculos:
         for id_, data, seg, apol, cli, ramo, *v in linhas:
             if not any(v):
                 continue
-            self.por_seg.setdefault(seg, []).append(
+            self.por_seg.setdefault(norm_seguradora(seg), []).append(
                 _Hist(data, id_, re.sub(r"\D", "", apol or ""), _nome_chave(cli), cli or "", cat_ramo(ramo), ramo, tuple(v))
             )
 
     def buscar(self, seguradora: str, apolice: str, cliente: str, ramo: str) -> tuple[_Hist | None, str | None]:
-        pool = self.por_seg.get(seguradora, [])
+        pool = self.por_seg.get(norm_seguradora(seguradora), [])
         apol, nome, cat = re.sub(r"\D", "", apolice or ""), _nome_chave(cliente), cat_ramo(ramo)
         consorcio = cat == "CONSORCIO"
         achados, motivo = [], None
@@ -140,6 +141,73 @@ class Vinculos:
         if len(combos) > 1:
             motivo = "VERIFICAR VÍNCULO: mesmo cliente no mesmo mês com informações diferentes"
         return b, motivo
+
+
+@dataclass
+class _Fech:
+    chave: tuple  # (ano, mes, linha): ordem de "mais recente"
+    nome: str
+    cat: str
+    tipo: str
+    v: tuple  # origem, produtor, parceiro
+    ref: str
+
+
+class Fechamento:
+    """Planilha FECHAMENTO DE PROPOSTAS sincronizada (passo 2 do buscarVinculo do script)."""
+
+    def __init__(self, db: Session, entidade_id: int):
+        self.por_seg: dict[str, list[_Fech]] = {}
+        for p in db.scalars(select(PropostaFechamento).where(PropostaFechamento.entidade_id == entidade_id)):
+            orig, prod, parc = p.origem, p.produtor, p.parceiro
+            if orig and not re.fullmatch(r"KETTE|ISADORA|ATUAL\s*PREV", orig):
+                # origem fora de Kette/Isadora/AtualPrev = Kette; se for produtora e não há parceiro, ela indicou
+                if not parc and produtor_valido(orig):
+                    parc = produtor_valido(orig)
+                orig = "KETTE"
+            if orig and re.fullmatch(r"ATUAL\s*PREV", orig):
+                orig = "ATUALPREV"
+            self.por_seg.setdefault(p.seguradora, []).append(
+                _Fech((p.ano, p.mes, p.linha), _nome_chave(p.cliente), cat_ramo(p.ramo), _sem_acento(p.tipo or "").upper(),
+                      (orig, prod, parc), f"FECHAMENTO {p.aba} linha {p.linha}")
+            )
+
+    def __bool__(self):
+        return bool(self.por_seg)
+
+    def candidatos(self, seguradora: str, cliente: str, ramo: str) -> tuple[list[_Fech], bool]:
+        pool = self.por_seg.get(norm_seguradora(seguradora), [])
+        nome, cat = _nome_chave(cliente), cat_ramo(ramo)
+        achados = [f for f in pool if nomes_batem(nome, f.nome) and _cat_ok(cat, f.cat)]
+        if achados:
+            return achados, False
+        return [f for f in pool if nomes_batem(nome, f.nome)], True
+
+    def buscar(self, seguradora: str, cliente: str, ramo: str) -> tuple[_Fech | None, str | None]:
+        achados, outro_ramo = self.candidatos(seguradora, cliente, ramo)
+        if not achados:
+            return None, None
+        f = max(achados, key=lambda x: x.chave)
+        motivo = f"VERIFICAR VÍNCULO: nome existe no FECHAMENTO em outro ramo ({f.cat})" if outro_ramo else None
+        if len({x.v for x in achados if x.chave[:2] == f.chave[:2]}) > 1:
+            motivo = "VERIFICAR VÍNCULO: FECHAMENTO com informações diferentes no mesmo mês"
+        return f, motivo
+
+    def mais_novo_que(self, h: "_Hist", seguradora: str, cliente: str, ramo: str) -> _Fech | None:
+        """FECHAMENTO do mesmo mês da BASE ou mais novo, com produtor ou parceiro diferente, manda (regra do script)."""
+        if cat_ramo(ramo) == "CONSORCIO":
+            return None
+        achados = [f for f in self.candidatos(seguradora, cliente, ramo)[0] if f.v[1] or f.v[2]]
+        achados = [f for f in achados if _cat_ok(cat_ramo(ramo), f.cat)]
+        if not achados:
+            return None
+        f = max(achados, key=lambda x: x.chave)
+        if f.chave[:2] < (h.data.year, h.data.month):
+            return None
+        prod_b, parc_b = (h.v[1] or "").upper(), (h.v[2] or "").upper()
+        if (f.v[1] and f.v[1] != prod_b) or (f.v[2] and f.v[2] != parc_b):
+            return f
+        return None
 
 
 def consolidar(grupos):
@@ -170,6 +238,7 @@ def _imposto(bruta: Decimal) -> Decimal:
 
 def gravar(db: Session, entidade_id: int, extratos: list[Extrato], arquivo: str) -> list[ResultadoExtrato]:
     vinc = Vinculos(db, entidade_id)
+    fech = Fechamento(db, entidade_id)
     saida = []
     for e in extratos:
         r = ResultadoExtrato(arquivo, e.codigo, e.seguradora, e.data.isoformat(), e.bruto, e.iss, e.liquido, e.linhas,
@@ -202,8 +271,14 @@ def gravar(db: Session, entidade_id: int, extratos: list[Extrato], arquivo: str)
                 origem, produtor, parceiro = g.origem_fixa, None, None
             else:
                 h, motivo = vinc.buscar(e.seguradora, g.apolice, g.cliente, g.ramo)
+                f = None
+                if h and fech:
+                    f = fech.mais_novo_que(h, e.seguradora, g.cliente, g.ramo)
+                    if f:
+                        motivo = None  # o FECHAMENTO é a fonte escolhida: alertas da BASE não valem
+                elif fech:
+                    f, motivo = fech.buscar(e.seguradora, g.cliente, g.ramo)
                 if h:
-                    origem, produtor, parceiro = (x.upper() if x else None for x in h.v)
                     antigo = h.cliente.upper()
                     if (
                         antigo != g.cliente
@@ -213,6 +288,8 @@ def gravar(db: Session, entidade_id: int, extratos: list[Extrato], arquivo: str)
                         g.cliente = antigo  # nome já cadastrado na BASE prevalece
                     if g.ramo == "?" and h.ramo:
                         g.ramo = h.ramo
+                if f or h:
+                    origem, produtor, parceiro = f.v if f else (x.upper() if x else None for x in h.v)
                     if motivo:
                         obs.insert(0, motivo)
                 else:

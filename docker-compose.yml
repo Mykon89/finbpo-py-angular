@@ -21,6 +21,10 @@ services:
       SECRET_KEY: ${SECRET_KEY:?defina SECRET_KEY no arquivo .env}
       CORS_ORIGINS: '["http://localhost:8080"]'
       MCP_TOKEN: ${MCP_TOKEN:-}
+      # chave JSON da conta de serviço do Google (planilha FECHAMENTO); ver docs/FECHAMENTO.md
+      GOOGLE_SERVICE_ACCOUNT_FILE: ${GOOGLE_SERVICE_ACCOUNT_FILE:-}
+    volumes:
+      - ./credenciais:/app/credenciais:ro
     depends_on:
       db:
         condition: service_healthy

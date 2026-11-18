@@ -6,6 +6,7 @@ categorização; RECEBER → extratos de comissão; BASE → linhas de comissão
 
 import hashlib
 import io
+import re
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
@@ -385,6 +386,10 @@ def chave_comissao(*partes) -> str:
 
 def _base(db: Session, cad: _Cadastros, linhas: list[dict], cache: dict) -> None:
     ja = Counter(db.scalars(select(Comissao.hash).where(Comissao.entidade_id == cad.eid)))
+    # linhas importadas por versão antiga, sem o texto da parcela ("3/12"): completa na reimportação
+    sem_parcela = {c.hash: c for c in db.scalars(
+        select(Comissao).where(Comissao.entidade_id == cad.eid, Comissao.parcela_texto.is_(None))
+    )}
     vistos: Counter = Counter()
     for ln in linhas:
         data = _data(_col(ln, "DT EXTRATO"))
@@ -398,6 +403,10 @@ def _base(db: Session, cad: _Cadastros, linhas: list[dict], cache: dict) -> None
         vistos[base] += 1
         h = chave_comissao(base, vistos[base])
         if ja[h]:
+            antiga = sem_parcela.get(h)
+            ptxt = (_txt(_col(ln, "PARCELA")) or "").removesuffix(".0")
+            if antiga is not None and ptxt:
+                antiga.parcela_texto = ptxt
             continue
         cod_ext = _txt(_col(ln, "EXTRATO"))
         produtor = _txt(_col(ln, "PRODUTOR"))
@@ -417,7 +426,8 @@ def _base(db: Session, cad: _Cadastros, linhas: list[dict], cache: dict) -> None
                 produtor=None if not produtor or set(produtor) == {"-"} else produtor,
                 parceiro=_txt(_col(ln, "PARCEIRO")),
                 observacao=_txt(_col(ln, "OBS")),
-                parcela=_int(_col(ln, "PARCELA")),
+                parcela=next((int(x) for x in re.findall(r"\d+", str(_col(ln, "PARCELA") or ""))), None),
+                parcela_texto=(_txt(_col(ln, "PARCELA")) or "").removesuffix(".0") or None,
                 prevista=_dec(_col(ln, "COM. PREVISTA")),
                 hash=h,
             )

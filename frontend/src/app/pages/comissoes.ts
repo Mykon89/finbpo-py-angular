@@ -9,6 +9,7 @@ import {
   Comparativo,
   ExtratoComissao,
   ExtratoImportado,
+  FechamentoStatus,
   ImportacaoPlanilha,
 } from '../core/models';
 
@@ -39,6 +40,64 @@ import {
     @if (erro()) {
       <p class="erro">{{ erro() }}</p>
     }
+
+    <details class="cartao fech" [open]="!fech()?.propostas">
+      <summary>
+        <strong>FECHAMENTO DE PROPOSTAS</strong>
+        @if (fech(); as f) {
+          <span class="sutil">
+            @if (f.propostas) {
+              · {{ f.propostas }} propostas · sincronizado {{ f.sincronizado_em | dataBr }}
+            } @else {
+              · não ligado: o vínculo e o "novo negócio" ficam só pela BASE
+            }
+          </span>
+        }
+      </summary>
+      <div class="fech-form">
+        <label class="largo"
+          >Link da planilha no Google Sheets
+          <input
+            [(ngModel)]="linkFech"
+            placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+            aria-label="Link da planilha FECHAMENTO"
+        /></label>
+        <button type="button" class="link" (click)="salvarFech()">Salvar link</button>
+        <button
+          type="button"
+          class="primario"
+          (click)="sincronizarFech()"
+          [disabled]="sincronizando() || !fech()?.planilha_id"
+        >
+          {{ sincronizando() ? 'Sincronizando…' : 'Sincronizar agora' }}
+        </button>
+        <label class="link arquivo"
+          >ou subir o .xlsx
+          <input type="file" accept=".xlsx" hidden (change)="subirFech($event)" />
+        </label>
+      </div>
+      @if (fech(); as f) {
+        <p class="sutil pequeno">
+          @if (f.conta_servico) {
+            Acesso pela conta de serviço do Google (compartilhe a planilha com o e-mail dela, como
+            leitor).
+          } @else {
+            Sem conta de serviço configurada: a planilha precisa estar com "qualquer pessoa com o
+            link pode ver". Veja docs/FECHAMENTO.md para o acesso privado (recomendado).
+          }
+          @if (f.abas.length) {
+            Abas lidas: {{ f.abas.join(', ') }}.
+          }
+          @if (f.novos_negocios !== null) {
+            {{ f.novos_negocios }} comissões marcadas como novo negócio.
+          }
+        </p>
+        @for (a of f.avisos; track a) {
+          <p class="neg pequeno">{{ a }}</p>
+        }
+      }
+    </details>
+
     @if (extratosImportados().length) {
       <section class="cartao sem-padding aviso">
         <h2>
@@ -71,7 +130,15 @@ import {
                     }
                     @if (x.sem_vinculo.length) {
                       <div class="neg">
-                        {{ x.sem_vinculo.length }} sem vínculo: {{ x.sem_vinculo.slice(0, 4).join('; ') }}{{ x.sem_vinculo.length > 4 ? ' e mais ' + (x.sem_vinculo.length - 4) + ' (filtro "sem produtor/parceiro")' : '' }}
+                        {{ x.sem_vinculo.length }} sem vínculo:
+                        {{ x.sem_vinculo.slice(0, 4).join('; ')
+                        }}{{
+                          x.sem_vinculo.length > 4
+                            ? ' e mais ' +
+                              (x.sem_vinculo.length - 4) +
+                              ' (filtro "sem produtor/parceiro")'
+                            : ''
+                        }}
                       </div>
                     }
                     @for (a of x.avisos; track a) {
@@ -117,7 +184,7 @@ import {
           <span>Comissão líquida</span><strong>{{ c.liquido_atual | brl }}</strong>
         </div>
         <div class="cartao kpi">
-          <span>Novos negócios (1ª parcela)</span><strong>{{ c.novos_valor | brl }}</strong>
+          <span>Novos negócios</span><strong>{{ c.novos_valor | brl }}</strong>
           <small>{{ c.novos_qtd }} apólices</small>
         </div>
         <button
@@ -327,6 +394,28 @@ import {
     .aviso {
       margin-bottom: 16px;
     }
+    .fech {
+      margin-bottom: 16px;
+    }
+    .fech summary {
+      cursor: pointer;
+    }
+    .fech-form {
+      display: flex;
+      gap: 12px;
+      align-items: end;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .fech-form .largo {
+      flex: 1 1 320px;
+    }
+    .fech-form .largo input {
+      width: 100%;
+    }
+    .arquivo {
+      cursor: pointer;
+    }
     .secundario {
       background: transparent;
       color: var(--primaria, #2563eb);
@@ -477,8 +566,59 @@ export class Comissoes {
     return f.seguradora ?? f.ramo ?? '';
   });
 
+  fech = signal<FechamentoStatus | null>(null);
+  sincronizando = signal(false);
+  linkFech = '';
+
   constructor() {
     effect(() => this.carregar());
+    effect(() => {
+      const eid = this.ent.id();
+      if (!eid) return;
+      this.api.fechamento(eid).subscribe((f) => {
+        this.fech.set(f);
+        this.linkFech = f.planilha_id
+          ? `https://docs.google.com/spreadsheets/d/${f.planilha_id}/edit`
+          : '';
+      });
+    });
+  }
+
+  private aposFech = {
+    next: (f: FechamentoStatus) => {
+      this.fech.set(f);
+      this.sincronizando.set(false);
+      this.carregar();
+    },
+    error: (e: unknown) => {
+      this.erro.set(mensagemErro(e));
+      this.sincronizando.set(false);
+    },
+  };
+
+  salvarFech() {
+    const eid = this.ent.id();
+    if (!eid) return;
+    this.erro.set('');
+    this.api.configurarFechamento(eid, this.linkFech.trim() || null).subscribe(this.aposFech);
+  }
+
+  sincronizarFech() {
+    const eid = this.ent.id();
+    if (!eid) return;
+    this.erro.set('');
+    this.sincronizando.set(true);
+    this.api.sincronizarFechamento(eid).subscribe(this.aposFech);
+  }
+
+  subirFech(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const arq = input.files?.[0];
+    const eid = this.ent.id();
+    input.value = '';
+    if (!arq || !eid) return;
+    this.sincronizando.set(true);
+    this.api.importarFechamento(eid, arq).subscribe(this.aposFech);
   }
 
   carregar() {
