@@ -32,17 +32,21 @@ class LinhaComplementar:
 
 # --- utilidades ---------------------------------------------------------------
 
-_RE_CNPJ = re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b")
-_RE_CPF = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
+# Aceita "12.345.678/0001-90", "12345678000190" e "12.345.678 0001-90" (Sicoob usa espaço)
+_RE_CNPJ = re.compile(r"(?<!\d)\d{2}\.?\d{3}\.?\d{3}[/\s]?\d{4}-?\d{2}(?!\d)")
+_RE_CPF = re.compile(r"(?<!\d)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?!\d)")
 _RE_VALOR = re.compile(r"-?\s?R?\$?\s?\d{1,3}(?:\.\d{3})*,\d{2}\s?-?(?:\s?[CD]\b)?|-?\d+,\d{2}\s?-?(?:\s?[CD]\b)?")
 _RE_DATA = re.compile(r"^(\d{2})/(\d{2})(?:/(\d{2,4}))?\b")
 
-_PREFIXOS = re.compile(
-    r"^(PIX|TED|DOC|TEF|TRANSF(ERENCIA)?|TRANSFERÊNCIA|PAG(AMENTO|TO)?|RECEB(IMENTO|IDO|IDA)?|"
-    r"ENVIAD[OA]|RECEBID[OA]|DEPOSITO|DEPÓSITO|CREDITO|CRÉDITO|DEBITO|DÉBITO|BOLETO|QR|CODE|"
-    r"INTERNET|SISPAG|CONTA|DE|PARA|EM|A|O|NO|NA|-|–|:|/|\d+)\b[\s\-–:/]*",
-    re.I,
-)
+# Palavras de banco que cercam o nome da contraparte e não fazem parte dele
+_RUIDO = {
+    "pix", "ted", "doc", "tef", "transf", "transferencia", "pag", "pagamento", "pagto", "pgto", "receb",
+    "recebimento", "recebido", "recebida", "enviado", "enviada", "emitido", "emitida", "outra", "outras",
+    "mesma", "if", "ifs", "instituicao", "titularidade", "deposito", "credito", "debito", "boleto", "qr",
+    "code", "qrcode", "internet", "sispag", "conta", "corrente", "de", "para", "em", "no", "na", "cpf",
+    "cnpj", "chave", "agendado", "agendamento", "compra", "app", "mobile", "banking", "transacao",
+    "liquidacao", "cobranca", "tit", "titulo", "estorno", "devolucao", "-", "–", ":", "/", "|",
+}
 
 
 def _norm(s: object) -> str:
@@ -68,17 +72,26 @@ def documento_valido(valor: object) -> str | None:
     return None
 
 
+def _limpar_nome(trecho: str) -> str | None:
+    tokens = re.sub(r"\d{2}/\d{2}(/\d{2,4})?", " ", trecho).split()
+    while tokens and (_norm(tokens[0]) in _RUIDO or not re.search(r"[A-Za-zÀ-ÿ]", tokens[0])):
+        tokens.pop(0)
+    while tokens and (_norm(tokens[-1]) in _RUIDO or not re.search(r"[A-Za-zÀ-ÿ]", tokens[-1])):
+        tokens.pop()
+    nome = " ".join(tokens).strip(" -–:/|")
+    return nome[:160] if len(re.sub(r"[^A-Za-zÀ-ÿ]", "", nome)) >= 3 else None
+
+
 def nome_da_descricao(texto: str) -> str | None:
-    """Tenta isolar o nome da contraparte numa descrição como 'PIX RECEBIDO 12.345.678/0001-90 EMPRESA X'."""
-    t = _RE_CNPJ.sub(" ", texto or "")
-    t = _RE_CPF.sub(" ", t)
-    t = re.sub(r"\d{2}/\d{2}(/\d{2,4})?", " ", t)
-    t = re.sub(r"\s+", " ", t).strip(" -–:/")
-    anterior = None
-    while anterior != t:
-        anterior = t
-        t = _PREFIXOS.sub("", t).strip(" -–:/")
-    return t[:160] if len(re.sub(r"[^A-Za-zÀ-ÿ]", "", t)) >= 3 else None
+    """Isola o nome da contraparte, ex.: 'Pagamento Pix 64.927.828 0001-72 HELVIS HONORARIOS' → 'HELVIS HONORARIOS'.
+
+    Prefere o texto depois do CPF/CNPJ (padrão mais comum) e cai para o texto antes dele.
+    """
+    texto = re.sub(r"\s+", " ", texto or "")
+    m = _RE_CNPJ.search(texto) or _RE_CPF.search(texto)
+    if m:
+        return _limpar_nome(texto[m.end() :]) or _limpar_nome(texto[: m.start()])
+    return _limpar_nome(texto)
 
 
 def _valor(v: object) -> Decimal | None:
@@ -177,8 +190,15 @@ def _de_linhas(linhas: list[list[object]]) -> list[LinhaComplementar]:
         d = _data(cel(linha, "data"))
         if not d:
             continue
-        descricao = str(cel(linha, "descricao") or "").strip()
-        if _norm(descricao).startswith(_IGNORAR_DESC):
+        usadas = {mapa.get(k) for k in ("data", "valor", "credito", "debito", "saldo", "nome", "documento")}
+        textos = [
+            re.sub(r"\s+", " ", str(v)).strip()
+            for j, v in enumerate(linha)
+            if j not in usadas and isinstance(v, str) and v.strip() and not _data(v) and _valor(v) is None
+        ]
+        principal = re.sub(r"\s+", " ", str(cel(linha, "descricao") or "")).strip()
+        descricao = " ".join(dict.fromkeys([principal, *textos])).strip() if principal else " ".join(textos)
+        if not descricao or _norm(descricao).startswith(_IGNORAR_DESC):
             continue
         if "valor" in mapa:
             valor = _valor(cel(linha, "valor"))
@@ -187,10 +207,12 @@ def _de_linhas(linhas: list[list[object]]) -> list[LinhaComplementar]:
             valor = (cr or Decimal(0)) - abs(db or Decimal(0)) if (cr or db) else None
         if not valor:
             continue
-        nome = str(cel(linha, "nome") or "").strip() or None
+        nome = re.sub(r"\s+", " ", str(cel(linha, "nome") or "")).strip() or None
         documento = documento_valido(cel(linha, "documento")) or extrair_documento(f"{descricao} {nome or ''}")
-        if not nome and documento:
-            nome = nome_da_descricao(descricao)
+        if not nome:
+            # o nome costuma estar na mesma célula do CPF/CNPJ
+            com_doc = next((t for t in [*textos, principal] if documento and extrair_documento(t) == documento), None)
+            nome = nome_da_descricao(com_doc or descricao) if documento else None
         resultado.append(LinhaComplementar(d, abs(valor), descricao[:255], nome and nome[:160], documento))
     return resultado
 
@@ -280,46 +302,59 @@ def ler_pdf(conteudo: bytes, ano_padrao: int | None = None, senha: str | None = 
         ano_padrao = int(max(set(anos), key=anos.count)) if anos else date.today().year
 
     resultado: list[LinhaComplementar] = []
-    atual: LinhaComplementar | None = None
+    atual: LinhaComplementar | None = None  # lançamento com valor, aceitando continuação
+    pendente: dict | None = None  # começou com data mas o valor ainda não apareceu
     ultima_data: date | None = None
+
+    def fechar(d: date, descricao: str, valor_txt: str) -> LinhaComplementar | None:
+        descricao = re.sub(r"\s+", " ", descricao).strip(" -")
+        valor = _valor(valor_txt)
+        if not valor or not descricao or _norm(descricao).startswith(_IGNORAR_DESC):
+            return None
+        item = LinhaComplementar(d, abs(valor), descricao[:255])
+        resultado.append(item)
+        return item
+
     for bruta in texto.splitlines():
-        linha = bruta.strip()
+        linha = re.sub(r"\s+", " ", bruta).strip()
         if not linha:
             continue
+        if _norm(linha).startswith(_IGNORAR_DESC):
+            atual = pendente = None
+            continue
         m = _RE_DATA.match(linha)
-        valores = list(_RE_VALOR.finditer(linha))
-        if m and valores:
-            d = _data(m.group(0), ano_padrao)
-            resto = linha[m.end() :]
-        elif not m and valores and ultima_data and atual is None:
-            # Alguns bancos só mostram a data na primeira linha do dia
-            d, resto = ultima_data, linha
-        else:
-            d = None
+        d = _data(m.group(0), ano_padrao) if m else None
+        corpo = linha[m.end() :].strip() if d else linha
+        valores = list(_RE_VALOR.finditer(corpo))
+
         if d:
             ultima_data = d
-            primeiro = valores[0]
-            descricao = (linha[m.end() : primeiro.start()] if m else linha[: primeiro.start()]).strip(" -")
-            if _norm(descricao).startswith(_IGNORAR_DESC) or not descricao:
-                atual = None
-                continue
-            valor = _valor(primeiro.group())
-            if not valor:
-                atual = None
-                continue
-            atual = LinhaComplementar(d, abs(valor), descricao[:255])
-            atual.documento = extrair_documento(resto)
-            resultado.append(atual)
+            atual = pendente = None
+            if valores:
+                atual = fechar(d, corpo[: valores[0].start()], valores[0].group())
+            else:
+                pendente = {"data": d, "texto": corpo, "linhas": 0}
+        elif pendente is not None:
+            if valores:
+                atual = fechar(pendente["data"], f"{pendente['texto']} {corpo[: valores[0].start()]}", valores[0].group())
+                pendente = None
+            else:
+                pendente["texto"] += f" {corpo}"
+                pendente["linhas"] += 1
+                if pendente["linhas"] > 3:  # não era lançamento (cabeçalho, rodapé)
+                    pendente = None
+        elif valores and ultima_data and atual is not None and valores[0].start() > 0:
+            # vários lançamentos no mesmo dia: só o primeiro mostra a data
+            atual = fechar(ultima_data, corpo[: valores[0].start()], valores[0].group())
         elif atual is not None and not valores and len(linha) < 160:
-            # continuação da descrição
             atual.descricao = f"{atual.descricao} {linha}"[:255]
-            if not atual.documento:
-                atual.documento = extrair_documento(linha)
         else:
             atual = None
-    for linha in resultado:
-        if linha.documento and not linha.nome:
-            linha.nome = nome_da_descricao(linha.descricao)
+
+    for item in resultado:
+        item.documento = extrair_documento(item.descricao)
+        if item.documento and not item.nome:
+            item.nome = nome_da_descricao(item.descricao)
     return resultado
 
 

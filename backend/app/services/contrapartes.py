@@ -56,23 +56,24 @@ class Vinculador:
             self.db.flush()
             self._cache[documento] = c
             self.criadas += 1
-        elif c.nome == c.documento and nome:
-            c.nome = nome[:160]
+        elif nome and c.nome == c.documento:
+            c.nome = nome[:160]  # contraparte criada só com o documento ganha nome
         return c
 
     def aplicar(self, trn: Transacao, documento: str | None, nome: str | None, complemento: str | None = None):
         texto = (complemento or "").strip()
         if texto and texto.upper() not in trn.descricao.upper() and len(texto) > len(trn.complemento or ""):
             trn.complemento = texto[:255]  # só guarda se acrescenta algo à descrição do OFX
-        if nome and not trn.contraparte_nome:
+        sem_nome = not trn.contraparte_nome or trn.contraparte_nome == trn.contraparte_documento
+        if nome and sem_nome:
             trn.contraparte_nome = nome[:160]
         if documento and trn.contraparte_documento and trn.contraparte_documento != documento:
             return  # já identificado por outro arquivo; não sobrescreve
         if documento:
             trn.contraparte_documento = documento
-            c = self.contraparte(documento, nome or trn.contraparte_nome)
+            c = self.contraparte(documento, nome if nome and sem_nome else None)
             trn.contraparte_id = c.id
-            if not trn.contraparte_nome:
+            if not trn.contraparte_nome and c.nome != documento:
                 trn.contraparte_nome = c.nome
 
 
