@@ -27,6 +27,7 @@ from app.schemas import (
     ComissaoLer,
     Comparativo,
     ExtratoComissaoLer,
+    ExtratoImportado,
     ImportacaoPlanilha,
     LinhaComparativo,
     PainelPagar,
@@ -35,7 +36,7 @@ from app.schemas import (
     RecorrenciaLer,
     TituloLer,
 )
-from app.services import planilha, recorrencias
+from app.services import comissoes, extratos_seguradoras, planilha, recorrencias
 
 router = APIRouter(prefix="/entidades/{entidade_id}", tags=["corretagem"])
 
@@ -66,6 +67,22 @@ async def importar_planilha(arquivo: UploadFile, entidade: EntidadeDep, db: DB):
     except (KeyError, ValueError, OSError) as e:
         raise HTTPException(422, f"Não consegui ler a planilha: {e}") from e
     return ImportacaoPlanilha(**asdict(res))
+
+
+@router.post("/extratos-comissao/importar", response_model=list[ExtratoImportado])
+async def importar_extratos(arquivos: list[UploadFile], entidade: EntidadeDep, db: DB):
+    """Extratos das seguradoras (Porto .do, Bradesco/Odontoprev TXT, MAG CSV, Azos XLSX, Sura/AKAD/Allianz PDF).
+    O formato é reconhecido pelo conteúdo; extrato já importado é ignorado."""
+    saida: list[ExtratoImportado] = []
+    for arq in arquivos:
+        nome = arq.filename or "arquivo"
+        try:
+            lidos = extratos_seguradoras.ler(await arq.read(), nome)
+        except (ValueError, KeyError, IndexError) as e:
+            saida.append(ExtratoImportado(arquivo=nome, erro=str(e)))
+            continue
+        saida += [ExtratoImportado(**asdict(r)) for r in comissoes.gravar(db, entidade.id, lidos, nome)]
+    return saida
 
 
 # --- comissões

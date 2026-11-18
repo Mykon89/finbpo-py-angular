@@ -366,5 +366,6 @@ class Comissao(Base):
     parceiro: Mapped[str | None] = mapped_column(String(60))
     observacao: Mapped[str | None] = mapped_column(String(255))
     parcela: Mapped[int | None] = mapped_column()
+    parcela_texto: Mapped[str | None] = mapped_column(String(60))  # ex.: "2/6", "1 e 2", "43 a 91"
     prevista: Mapped[Decimal | None] = mapped_column(Dinheiro)
     hash: Mapped[str] = mapped_column(String(64), index=True)  # deduplicação na reimportação

@@ -316,6 +316,7 @@ export interface Comissao {
   parceiro: string | null;
   observacao: string | null;
   parcela: number | null;
+  parcela_texto: string | null;
 }
 
 export interface ExtratoComissao {
@@ -365,4 +366,21 @@ export interface PainelPagar {
   pago_no_mes: string;
   dias: number;
   titulos: Titulo[];
+}
+
+export interface ExtratoImportado {
+  arquivo: string;
+  codigo: string | null;
+  seguradora: string | null;
+  data: string | null;
+  bruto: string;
+  iss: string;
+  liquido: string;
+  linhas: number;
+  gravadas: number;
+  ja_importado: boolean;
+  sem_vinculo: string[];
+  divergencias: string[];
+  avisos: string[];
+  erro: string | null;
 }

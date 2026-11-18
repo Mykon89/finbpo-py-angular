@@ -19,9 +19,11 @@ Pode reimportar a qualquer momento: o que já existe não é duplicado (PAGAR pe
 | RECEBER / Conferência | Comissões → Extratos do mês | ✅ |
 | VISÃO MENSAL / COMPARATIVO (ramo, seguradora, novos negócios) | Comissões | ✅ |
 | Vínculo ORIGEM/PRODUTOR/PARCEIRO | Edição na linha + filtro "sem produtor/parceiro" | ✅ manual |
-| Importadores de extrato por seguradora (Porto, Bradesco, Tokio, Allianz…) | — | próxima fase |
+| Importadores: Porto (Gerais/Saúde/Vida .do), Bradesco TXT, Odontoprev TXT, Sura PDF, AKAD PDF, Allianz PDF, Azos XLSX, MAG CSV | Comissões → Importar extratos | ✅ |
+| Demais seguradoras (Tokio, HDI, Mapfre, Amil, SulAmérica, Yelum, Pier, Petlove, EZZE, Suhai, Zurich, MetLife, Porto Consórcio) | — | aguardando extratos de exemplo |
+| Vínculo pela BASE (apólice → nome no ramo → nome em outro ramo; CLIENTES_SOMADOS; produtora só FABIANA/GIOVANNA) | automático na importação | ✅ |
 | Conciliação RECEBER × banco (1→N, N→1, tolerância R$ 0,05, Bradesco por fatura) | — | próxima fase |
 | Conciliação PAGAR × débitos do banco (6 passes) e aprendizado | parcial (conciliação atual por valor/data) | próxima fase |
-| Vínculo automático pelo histórico / FECHAMENTO DE PROPOSTAS / Gmail Trust | — | próxima fase |
+| Vínculo pelo FECHAMENTO DE PROPOSTAS / Gmail Trust | — | próxima fase |
 | Comissões Giovanna/Fabi (metas, níveis, PL) | — | próxima fase |
 | Exportação Conta Azul, OCR de boletos/holerites/DARF, 13º, virada de ano | — | a definir |

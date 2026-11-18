@@ -444,6 +444,7 @@ class ComissaoLer(ORM):
     parceiro: str | None
     observacao: str | None
     parcela: int | None
+    parcela_texto: str | None = None
 
 
 class ComissaoAtualizar(BaseModel):
@@ -501,3 +502,20 @@ class PainelPagar(BaseModel):
     pago_no_mes: Decimal
     dias: int
     titulos: list[TituloLer]
+
+
+class ExtratoImportado(BaseModel):
+    arquivo: str
+    codigo: str | None = None
+    seguradora: str | None = None
+    data: str | None = None
+    bruto: Decimal = Decimal("0")
+    iss: Decimal = Decimal("0")
+    liquido: Decimal = Decimal("0")
+    linhas: int = 0
+    gravadas: int = 0
+    ja_importado: bool = False
+    sem_vinculo: list[str] = []
+    divergencias: list[str] = []
+    avisos: list[str] = []
+    erro: str | None = None

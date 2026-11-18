@@ -4,7 +4,13 @@ import { Api } from '../core/api';
 import { mensagemErro } from '../core/auth';
 import { EntidadeAtual } from '../core/entidade-atual';
 import { BrlPipe, DataBrPipe } from '../core/formato';
-import { Comissao, Comparativo, ExtratoComissao, ImportacaoPlanilha } from '../core/models';
+import {
+  Comissao,
+  Comparativo,
+  ExtratoComissao,
+  ExtratoImportado,
+  ImportacaoPlanilha,
+} from '../core/models';
 
 @Component({
   selector: 'app-comissoes',
@@ -20,6 +26,10 @@ import { Comissao, Comparativo, ExtratoComissao, ImportacaoPlanilha } from '../c
           aria-label="Mês do extrato"
         />
         <label class="botao">
+          {{ importandoExt() ? 'Lendo extratos…' : 'Importar extratos das seguradoras' }}
+          <input type="file" multiple hidden (change)="importarExtratos($event)" />
+        </label>
+        <label class="botao secundario">
           {{ importando() ? 'Importando…' : 'Importar planilha (.xlsx)' }}
           <input type="file" accept=".xlsx,.xlsm" hidden (change)="importar($event)" />
         </label>
@@ -28,6 +38,52 @@ import { Comissao, Comparativo, ExtratoComissao, ImportacaoPlanilha } from '../c
 
     @if (erro()) {
       <p class="erro">{{ erro() }}</p>
+    }
+    @if (extratosImportados().length) {
+      <section class="cartao sem-padding aviso">
+        <h2>
+          Extratos lidos
+          <button type="button" class="link" (click)="extratosImportados.set([])">fechar</button>
+        </h2>
+        <table>
+          <tbody>
+            @for (x of extratosImportados(); track $index) {
+              <tr>
+                <td>
+                  <strong>{{ x.codigo ?? x.arquivo }}</strong>
+                  <div class="sutil pequeno">{{ x.arquivo }}</div>
+                </td>
+                @if (x.erro) {
+                  <td colspan="4" class="neg">{{ x.erro }}</td>
+                } @else {
+                  <td>{{ x.data | dataBr }}</td>
+                  <td class="num">bruto {{ x.bruto | brl }} · líquido {{ x.liquido | brl }}</td>
+                  <td>
+                    @if (x.ja_importado) {
+                      <span class="status" data-s="pago">já importado</span>
+                    } @else {
+                      {{ x.gravadas }} lançamentos
+                    }
+                  </td>
+                  <td>
+                    @for (d of x.divergencias; track d) {
+                      <div class="neg">⚠ {{ d }}</div>
+                    }
+                    @if (x.sem_vinculo.length) {
+                      <div class="neg">
+                        {{ x.sem_vinculo.length }} sem vínculo: {{ x.sem_vinculo.slice(0, 4).join('; ') }}{{ x.sem_vinculo.length > 4 ? ' e mais ' + (x.sem_vinculo.length - 4) + ' (filtro "sem produtor/parceiro")' : '' }}
+                      </div>
+                    }
+                    @for (a of x.avisos; track a) {
+                      <div class="sutil pequeno">{{ a }}</div>
+                    }
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </section>
     }
     @if (resultado(); as r) {
       <p class="cartao aviso">
@@ -205,7 +261,7 @@ import { Comissao, Comparativo, ExtratoComissao, ImportacaoPlanilha } from '../c
               <td>
                 {{ l.seguradora }}<span class="sutil"> · {{ l.ramo }}</span>
                 @if (l.parcela) {
-                  <span class="sutil"> · parc. {{ l.parcela }}</span>
+                  <span class="sutil"> · parc. {{ l.parcela_texto ?? l.parcela }}</span>
                 }
               </td>
               <td>
@@ -270,6 +326,11 @@ import { Comissao, Comparativo, ExtratoComissao, ImportacaoPlanilha } from '../c
     }
     .aviso {
       margin-bottom: 16px;
+    }
+    .secundario {
+      background: transparent;
+      color: var(--primaria, #2563eb);
+      border: 1px solid currentColor;
     }
     .grade-kpi {
       display: grid;
@@ -368,6 +429,8 @@ export class Comissoes {
   erro = signal('');
   importando = signal(false);
   resultado = signal<ImportacaoPlanilha | null>(null);
+  importandoExt = signal(false);
+  extratosImportados = signal<ExtratoImportado[]>([]);
 
   blocos = computed(() => {
     const c = this.cmp();
@@ -446,6 +509,33 @@ export class Comissoes {
     this.api.atualizarComissao(eid, l.id, { [campo]: valor }).subscribe({
       next: (novo) => this.linhas.update((ls) => ls.map((x) => (x.id === novo.id ? novo : x))),
       error: (e) => this.erro.set(mensagemErro(e)),
+    });
+  }
+
+  importarExtratos(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const arquivos = Array.from(input.files ?? []);
+    const eid = this.ent.id();
+    input.value = '';
+    if (!arquivos.length || !eid) return;
+    this.erro.set('');
+    this.importandoExt.set(true);
+    this.api.importarExtratos(eid, arquivos).subscribe({
+      next: (r) => {
+        this.extratosImportados.set(r);
+        this.importandoExt.set(false);
+        const mais = r
+          .filter((x) => x.data)
+          .map((x) => x.data!.slice(0, 7))
+          .sort()
+          .pop();
+        if (mais && mais !== this.mes()) this.mes.set(mais);
+        else this.carregar();
+      },
+      error: (e) => {
+        this.erro.set(mensagemErro(e));
+        this.importandoExt.set(false);
+      },
     });
   }
 

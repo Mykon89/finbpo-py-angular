@@ -8,6 +8,7 @@ import {
   Comparativo,
   ComplementoResultado,
   ExtratoComissao,
+  ExtratoImportado,
   ImportacaoPlanilha,
   PainelPagar,
   Recorrencia,
@@ -128,6 +129,11 @@ export class Api {
     const form = new FormData();
     form.append('arquivo', arquivo);
     return this.http.post<ImportacaoPlanilha>(`${this.e(eid)}/importar-planilha`, form);
+  }
+  importarExtratos(eid: number, arquivos: File[]) {
+    const form = new FormData();
+    arquivos.forEach((f) => form.append('arquivos', f));
+    return this.http.post<ExtratoImportado[]>(`${this.e(eid)}/extratos-comissao/importar`, form);
   }
   comissoes(
     eid: number,

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     conciliacao_tolerancia_dias: int = 5
     # Token do conector MCP (Claude Desktop / Claude Code). Vazio = conector desligado.
     mcp_token: str = ""
+    aliquota_imposto_comissao: float = 0.087  # alíquota usada na coluna IMP (planilha: =C.BRUTA*0,087)
 
 
 settings = Settings()
