@@ -449,8 +449,13 @@ export class Entidades {
     this.f.documento = d.length === 14 ? documentoFormatado(d) : valor;
     const ok = cnpjValido(d);
     this.cnpjOk.set(ok);
+    const existente = ok
+      ? this.ent.lista().find((e) => e.documento === d && e.id !== this.editandoId())
+      : undefined;
     if (d.length === 14 && !ok)
       this.aviso.set({ texto: 'CNPJ inválido: confira os dígitos.', erro: true });
+    else if (existente)
+      this.aviso.set({ texto: `Este CNPJ já está cadastrado em "${existente.nome}".`, erro: true });
     else if (ok && d !== this.ultimoBuscado) this.buscar();
     else if (d.length < 14) this.aviso.set(null);
   }
