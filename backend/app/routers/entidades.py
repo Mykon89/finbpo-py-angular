@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException
@@ -32,6 +33,7 @@ from app.schemas import (
     RegraLer,
 )
 from app.services.categorizacao import aplicar_regras
+from app.services.cnpj import cnpj_valido, cpf_valido, so_digitos
 from app.services.plano_contas import PLANOS
 
 router = APIRouter(prefix="/entidades", tags=["entidades"])
@@ -45,11 +47,38 @@ def listar(db: DB, _: UsuarioAtual, incluir_inativas: bool = False):
     return db.scalars(stmt).all()
 
 
+def _normalizar_documento(db, tipo: TipoEntidade, documento: str | None, ignorar_id: int | None = None) -> str | None:
+    if not documento:
+        return None
+    doc = so_digitos(documento)
+    if tipo == TipoEntidade.PJ and not cnpj_valido(doc):
+        raise HTTPException(422, "CNPJ inválido")
+    if tipo == TipoEntidade.PF and not cpf_valido(doc):
+        raise HTTPException(422, "CPF inválido")
+    existente = db.scalar(select(Entidade).where(Entidade.documento == doc))
+    if existente and existente.id != ignorar_id:
+        raise HTTPException(409, f"Documento já cadastrado na entidade '{existente.nome}'")
+    return doc
+
+
+def _limpar(dados: dict) -> dict:
+    for campo in ("cep", "telefone"):
+        if dados.get(campo):
+            dados[campo] = so_digitos(dados[campo])
+    if dados.get("uf"):
+        dados["uf"] = dados["uf"].upper()
+    if dados.get("razao_social"):
+        dados["dados_atualizados_em"] = datetime.now(UTC)
+    return dados
+
+
 @router.post("", response_model=EntidadeLer, status_code=201)
 def criar(dados: EntidadeCriar, db: DB, _: UsuarioAtual):
     if (dados.segmento == Segmento.PF) != (dados.tipo == TipoEntidade.PF):
         raise HTTPException(422, "Segmento 'pf' exige tipo PF (e vice-versa)")
-    entidade = Entidade(**dados.model_dump(exclude={"criar_plano_contas"}))
+    valores = _limpar(dados.model_dump(exclude={"criar_plano_contas"}))
+    valores["documento"] = _normalizar_documento(db, dados.tipo, dados.documento)
+    entidade = Entidade(**valores)
     db.add(entidade)
     db.flush()
     if dados.criar_plano_contas:
@@ -66,7 +95,10 @@ def obter(entidade: EntidadeDep):
 
 @router.patch("/{entidade_id}", response_model=EntidadeLer)
 def atualizar(dados: EntidadeAtualizar, entidade: EntidadeDep, db: DB):
-    for k, v in dados.model_dump(exclude_unset=True).items():
+    valores = _limpar(dados.model_dump(exclude_unset=True))
+    if "documento" in valores:
+        valores["documento"] = _normalizar_documento(db, entidade.tipo, valores["documento"], entidade.id)
+    for k, v in valores.items():
         setattr(entidade, k, v)
     db.commit()
     return entidade

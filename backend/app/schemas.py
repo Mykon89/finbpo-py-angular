@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -37,30 +37,57 @@ class UsuarioLer(ORM):
 
 
 # --- entidade
-class EntidadeCriar(BaseModel):
-    tipo: TipoEntidade
-    segmento: Segmento
-    nome: str
+class CNAELer(BaseModel):
+    codigo: str
+    descricao: str
+
+
+class EntidadeCampos(BaseModel):
+    """Campos opcionais comuns a criação e edição."""
+
     documento: str | None = None
     email: EmailStr | None = None
+    telefone: str | None = None
+    razao_social: str | None = None
+    nome_fantasia: str | None = None
+    situacao_cadastral: str | None = None
+    data_abertura: date | None = None
+    natureza_juridica: str | None = None
+    porte: str | None = None
+    cnae_principal: str | None = None
+    cnae_descricao: str | None = None
+    cnaes_secundarios: list[CNAELer] | None = None
+    optante_simples: bool | None = None
+    mei: bool | None = None
+    cep: str | None = None
+    logradouro: str | None = None
+    numero: str | None = None
+    complemento: str | None = None
+    bairro: str | None = None
+    municipio: str | None = None
+    uf: str | None = Field(None, max_length=2)
+
+
+class EntidadeCriar(EntidadeCampos):
+    tipo: TipoEntidade
+    segmento: Segmento
+    nome: str = Field(min_length=1)
     criar_plano_contas: bool = True
 
 
-class EntidadeAtualizar(BaseModel):
-    nome: str | None = None
-    documento: str | None = None
-    email: EmailStr | None = None
+class EntidadeAtualizar(EntidadeCampos):
+    nome: str | None = Field(None, min_length=1)
     ativo: bool | None = None
 
 
-class EntidadeLer(ORM):
+class EntidadeLer(ORM, EntidadeCampos):
     id: int
     tipo: TipoEntidade
     segmento: Segmento
     nome: str
-    documento: str | None
-    email: str | None
     ativo: bool
+    email: str | None = None  # sem validação na leitura
+    dados_atualizados_em: datetime | None = None
 
 
 # --- cadastros

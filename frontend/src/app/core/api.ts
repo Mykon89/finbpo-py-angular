@@ -4,6 +4,7 @@ import {
   Aging,
   Categoria,
   Conta,
+  DadosCNPJ,
   DRE,
   Entidade,
   ImportacaoResultado,
@@ -40,6 +41,12 @@ export class Api {
   }
   criarEntidade(dados: Partial<Entidade>) {
     return this.http.post<Entidade>(`${this.base}/entidades`, dados);
+  }
+  atualizarEntidade(id: number, dados: Partial<Entidade>) {
+    return this.http.patch<Entidade>(`${this.base}/entidades/${id}`, dados);
+  }
+  consultarCnpj(cnpj: string) {
+    return this.http.get<DadosCNPJ>(`${this.base}/cnpj/${cnpj}`);
   }
   categorias(eid: number) {
     return this.http.get<Categoria[]>(`${this.e(eid)}/categorias`);

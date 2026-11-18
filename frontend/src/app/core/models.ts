@@ -3,14 +3,48 @@ export type TipoTitulo = 'pagar' | 'receber';
 export type StatusTitulo = 'aberto' | 'parcial' | 'pago' | 'cancelado';
 export type TipoConta = 'corrente' | 'poupanca' | 'cartao' | 'caixa' | 'maquininha';
 
-export interface Entidade {
+export interface CNAE {
+  codigo: string;
+  descricao: string;
+}
+
+export interface DadosCadastrais {
+  documento: string | null;
+  email: string | null;
+  telefone: string | null;
+  razao_social: string | null;
+  nome_fantasia: string | null;
+  situacao_cadastral: string | null;
+  data_abertura: string | null;
+  natureza_juridica: string | null;
+  porte: string | null;
+  cnae_principal: string | null;
+  cnae_descricao: string | null;
+  cnaes_secundarios: CNAE[] | null;
+  optante_simples: boolean | null;
+  mei: boolean | null;
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  municipio: string | null;
+  uf: string | null;
+}
+
+export interface Entidade extends DadosCadastrais {
   id: number;
   tipo: 'PJ' | 'PF';
   segmento: Segmento;
   nome: string;
-  documento: string | null;
-  email: string | null;
   ativo: boolean;
+  dados_atualizados_em: string | null;
+}
+
+export interface DadosCNPJ extends Omit<DadosCadastrais, 'documento'> {
+  cnpj: string;
+  segmento_sugerido: Segmento | null;
+  fonte: string;
 }
 
 export interface Categoria {

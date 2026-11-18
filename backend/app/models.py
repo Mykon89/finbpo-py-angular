@@ -3,6 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     Date,
     DateTime,
     Enum,
@@ -89,15 +90,40 @@ class Usuario(Base):
 
 class Entidade(Base):
     __tablename__ = "entidade"
+    __table_args__ = (UniqueConstraint("documento", name="uq_entidade_documento"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     tipo: Mapped[TipoEntidade] = mapped_column(_enum(TipoEntidade))
     segmento: Mapped[Segmento] = mapped_column(_enum(Segmento))
-    nome: Mapped[str] = mapped_column(String(160))
-    documento: Mapped[str | None] = mapped_column(String(20))  # CNPJ/CPF opcional
+    nome: Mapped[str] = mapped_column(String(160))  # nome de exibição
+    documento: Mapped[str | None] = mapped_column(String(20))  # CNPJ/CPF, só dígitos
     email: Mapped[str | None] = mapped_column(String(180))
+    telefone: Mapped[str | None] = mapped_column(String(30))
     ativo: Mapped[bool] = mapped_column(default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Dados cadastrais (Receita Federal, para PJ)
+    razao_social: Mapped[str | None] = mapped_column(String(200))
+    nome_fantasia: Mapped[str | None] = mapped_column(String(200))
+    situacao_cadastral: Mapped[str | None] = mapped_column(String(40))
+    data_abertura: Mapped[date | None] = mapped_column(Date)
+    natureza_juridica: Mapped[str | None] = mapped_column(String(120))
+    porte: Mapped[str | None] = mapped_column(String(40))
+    cnae_principal: Mapped[str | None] = mapped_column(String(7))
+    cnae_descricao: Mapped[str | None] = mapped_column(String(255))
+    cnaes_secundarios: Mapped[list | None] = mapped_column(JSON)
+    optante_simples: Mapped[bool | None] = mapped_column()
+    mei: Mapped[bool | None] = mapped_column()
+    dados_atualizados_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Endereço
+    cep: Mapped[str | None] = mapped_column(String(8))
+    logradouro: Mapped[str | None] = mapped_column(String(200))
+    numero: Mapped[str | None] = mapped_column(String(20))
+    complemento: Mapped[str | None] = mapped_column(String(200))
+    bairro: Mapped[str | None] = mapped_column(String(120))
+    municipio: Mapped[str | None] = mapped_column(String(120))
+    uf: Mapped[str | None] = mapped_column(String(2))
 
     contas: Mapped[list["ContaFinanceira"]] = relationship(back_populates="entidade")
 
