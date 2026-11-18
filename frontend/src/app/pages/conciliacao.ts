@@ -112,8 +112,8 @@ import { Categoria, Conta, Sugestao, Titulo, Transacao } from '../core/models';
       </table>
     </div>
     <label class="regra"
-      ><input type="checkbox" [(ngModel)]="salvarRegra" /> Ao categorizar, criar regra para
-      descrições iguais</label
+      ><input type="checkbox" [(ngModel)]="salvarRegra" /> Ao categorizar, criar regra (pelo CPF/CNPJ de
+      quem pagou/recebeu; sem ele, pela descrição)</label
     >
   `,
   styles: `
