@@ -401,3 +401,19 @@ class PropostaFechamento(Base):
     com_bruta: Mapped[Decimal | None] = mapped_column(Dinheiro)
     emissao: Mapped[str | None] = mapped_column(String(30))  # EMITIDA / CANCELADA / ...
     recebido: Mapped[Decimal | None] = mapped_column(Dinheiro)
+
+
+class ArquivoMonitorado(Base):
+    """Arquivo achado na pasta monitorada (robôs / Claude in Chrome salvam os extratos lá)."""
+
+    __tablename__ = "arquivo_monitorado"
+    __table_args__ = (UniqueConstraint("entidade_id", "hash", name="uq_arquivo_monitorado_hash"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
+    nome: Mapped[str] = mapped_column(String(255))
+    hash: Mapped[str] = mapped_column(String(64))
+    situacao: Mapped[str] = mapped_column(String(20))  # importado / ja_importado / ignorado / erro
+    mensagem: Mapped[str | None] = mapped_column(Text)
+    extratos: Mapped[str | None] = mapped_column(String(255))  # códigos gravados
+    processado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

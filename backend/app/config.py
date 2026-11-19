@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     mcp_token: str = ""
     # Conta de serviço do Google (JSON) com acesso de leitura à planilha FECHAMENTO; vazio = link público
     google_service_account_file: str = ""
+    # Pasta monitorada: extratos salvos nela são importados sozinhos (subpasta com o id ou CNPJ escolhe a entidade)
+    extratos_pasta: str = ""
+    extratos_entidade_id: int | None = None  # entidade dos arquivos soltos na raiz da pasta
+    extratos_intervalo_segundos: int = 60
     aliquota_imposto_comissao: float = 0.087  # alíquota usada na coluna IMP (planilha: =C.BRUTA*0,087)
 
 

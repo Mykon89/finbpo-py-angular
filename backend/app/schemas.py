@@ -560,3 +560,19 @@ class PrevisaoLer(BaseModel):
     meses: list[MesPrevisao]
     itens: list[ItemPrevisaoLer]
     atrasados: list[ItemPrevisaoLer]
+
+
+class ArquivoMonitoradoLer(ORM):
+    id: int
+    nome: str
+    situacao: str
+    mensagem: str | None
+    extratos: str | None
+    processado_em: datetime
+
+
+class PastaStatus(BaseModel):
+    configurada: bool
+    intervalo_segundos: int
+    entidade_padrao: int | None
+    arquivos: list[ArquivoMonitoradoLer]

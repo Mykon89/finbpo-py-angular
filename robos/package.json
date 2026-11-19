@@ -1,0 +1,13 @@
+{
+  "name": "finbpo-robos",
+  "private": true,
+  "type": "module",
+  "description": "Robôs que baixam os extratos de comissão nos portais das seguradoras e salvam na pasta monitorada do FinBPO",
+  "scripts": {
+    "baixar": "node finbpo-robo.mjs",
+    "gravar": "playwright codegen"
+  },
+  "dependencies": {
+    "playwright": "1.49.1"
+  }
+}

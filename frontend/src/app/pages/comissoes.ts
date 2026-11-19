@@ -11,6 +11,7 @@ import {
   ExtratoImportado,
   FechamentoStatus,
   ImportacaoPlanilha,
+  PastaStatus,
 } from '../core/models';
 
 @Component({
@@ -97,6 +98,47 @@ import {
         }
       }
     </details>
+
+    @if (pasta(); as pst) {
+      <details class="cartao fech">
+        <summary>
+          <strong>Pasta monitorada</strong>
+          <span class="sutil">
+            @if (pst.configurada) {
+              · lida a cada {{ pst.intervalo_segundos }}s · {{ pst.arquivos.length }} arquivo(s)
+              recentes
+            } @else {
+              · desligada (robôs e Claude in Chrome salvam nela; ver docs/ROBOS.md)
+            }
+          </span>
+        </summary>
+        @if (pst.configurada) {
+          <div class="fech-form">
+            <button type="button" class="primario" (click)="lerPasta()">Ler a pasta agora</button>
+          </div>
+          <table>
+            <tbody>
+              @for (a of pst.arquivos; track a.id) {
+                <tr>
+                  <td>{{ a.processado_em | dataBr }}</td>
+                  <td>{{ a.nome }}</td>
+                  <td>
+                    <span class="status" [attr.data-s]="cssArquivo(a.situacao)">{{
+                      a.situacao.replace('_', ' ')
+                    }}</span>
+                  </td>
+                  <td class="sutil pequeno">{{ a.extratos }} {{ a.mensagem }}</td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td class="sutil">Nenhum arquivo ainda.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </details>
+    }
 
     @if (extratosImportados().length) {
       <section class="cartao sem-padding aviso">
@@ -567,6 +609,7 @@ export class Comissoes {
   });
 
   fech = signal<FechamentoStatus | null>(null);
+  pasta = signal<PastaStatus | null>(null);
   sincronizando = signal(false);
   linkFech = '';
 
@@ -575,6 +618,7 @@ export class Comissoes {
     effect(() => {
       const eid = this.ent.id();
       if (!eid) return;
+      this.api.pasta(eid).subscribe((p) => this.pasta.set(p));
       this.api.fechamento(eid).subscribe((f) => {
         this.fech.set(f);
         this.linkFech = f.planilha_id
@@ -595,6 +639,22 @@ export class Comissoes {
       this.sincronizando.set(false);
     },
   };
+
+  lerPasta() {
+    const eid = this.ent.id();
+    if (!eid) return;
+    this.api.varrerPasta(eid).subscribe({
+      next: (p) => {
+        this.pasta.set(p);
+        this.carregar();
+      },
+      error: (e) => this.erro.set(mensagemErro(e)),
+    });
+  }
+
+  cssArquivo(s: string) {
+    return s === 'importado' ? 'pago' : s === 'erro' ? 'cancelado' : 'aberto';
+  }
 
   salvarFech() {
     const eid = this.ent.id();

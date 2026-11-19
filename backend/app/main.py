@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,8 +12,15 @@ from app.security import usuario_atual
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    from app.services.pasta_monitorada import vigiar
+
+    tarefa = asyncio.create_task(vigiar()) if settings.extratos_pasta else None
     async with ciclo_de_vida():
         yield
+    if tarefa:
+        tarefa.cancel()
+        with suppress(asyncio.CancelledError):
+            await tarefa
 
 
 app = FastAPI(title="FinBPO", version="0.1.0", lifespan=lifespan)

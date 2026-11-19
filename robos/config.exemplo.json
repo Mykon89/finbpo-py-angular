@@ -1,0 +1,5 @@
+{
+  "pasta": "C:/FinBPO/extratos",
+  "seguradoras": ["porto", "tokio", "allianz"],
+  "esperarLoginMinutos": 5
+}

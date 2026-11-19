@@ -421,3 +421,19 @@ export interface Previsao {
   itens: ItemPrevisao[];
   atrasados: ItemPrevisao[];
 }
+
+export interface ArquivoMonitorado {
+  id: number;
+  nome: string;
+  situacao: 'importado' | 'ja_importado' | 'ignorado' | 'erro';
+  mensagem: string | null;
+  extratos: string | null;
+  processado_em: string;
+}
+
+export interface PastaStatus {
+  configurada: boolean;
+  intervalo_segundos: number;
+  entidade_padrao: number | null;
+  arquivos: ArquivoMonitorado[];
+}

@@ -31,6 +31,7 @@ from app.schemas import (
     ExtratoComissaoLer,
     ExtratoImportado,
     FechamentoConfig,
+    PastaStatus,
     FechamentoStatus,
     PrevisaoLer,
     ImportacaoPlanilha,
@@ -42,7 +43,8 @@ from app.schemas import (
     TituloLer,
 )
 from app.config import settings
-from app.models import PropostaFechamento
+from app.models import ArquivoMonitorado, PropostaFechamento
+from app.services import pasta_monitorada
 from app.services import comissoes, extratos_seguradoras, fechamento, planilha, previsao, recorrencias
 
 router = APIRouter(prefix="/entidades/{entidade_id}", tags=["corretagem"])
@@ -382,3 +384,26 @@ def painel_pagar(entidade: EntidadeDep, db: DB, dias: int = Query(7, ge=0, le=36
         dias=dias,
         titulos=[t for t in titulos if t.vencimento <= limite],
     )
+
+
+
+# --- pasta monitorada (robôs / Claude in Chrome)
+@router.get("/pasta", response_model=PastaStatus)
+def status_pasta(entidade: EntidadeDep, db: DB, limite: int = Query(30, le=200)):
+    arquivos = db.scalars(
+        select(ArquivoMonitorado)
+        .where(ArquivoMonitorado.entidade_id == entidade.id)
+        .order_by(ArquivoMonitorado.processado_em.desc(), ArquivoMonitorado.id.desc())
+        .limit(limite)
+    ).all()
+    return PastaStatus(configurada=bool(settings.extratos_pasta), intervalo_segundos=settings.extratos_intervalo_segundos,
+                       entidade_padrao=settings.extratos_entidade_id, arquivos=arquivos)
+
+
+@router.post("/pasta/varrer", response_model=PastaStatus)
+def varrer_pasta(entidade: EntidadeDep, db: DB):
+    """Força a leitura da pasta agora (sem esperar o intervalo)."""
+    if not settings.extratos_pasta:
+        raise HTTPException(422, "Pasta monitorada não configurada (EXTRATOS_PASTA no .env)")
+    pasta_monitorada.varrer(db)
+    return status_pasta(entidade, db, limite=30)

@@ -23,8 +23,12 @@ services:
       MCP_TOKEN: ${MCP_TOKEN:-}
       # chave JSON da conta de serviço do Google (planilha FECHAMENTO); ver docs/FECHAMENTO.md
       GOOGLE_SERVICE_ACCOUNT_FILE: ${GOOGLE_SERVICE_ACCOUNT_FILE:-}
+      # pasta monitorada: robôs e Claude in Chrome salvam os extratos nela (ver docs/ROBOS.md)
+      EXTRATOS_PASTA: /app/entrada
+      EXTRATOS_ENTIDADE_ID: ${EXTRATOS_ENTIDADE_ID:-}
     volumes:
       - ./credenciais:/app/credenciais:ro
+      - ${EXTRATOS_PASTA_HOST:-./entrada}:/app/entrada
     depends_on:
       db:
         condition: service_healthy

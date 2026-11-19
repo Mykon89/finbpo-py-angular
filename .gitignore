@@ -21,3 +21,10 @@ dist/
 # Chaves (conta de serviço do Google etc.)
 credenciais/*
 !credenciais/.gitkeep
+
+# Pasta monitorada e robôs
+entrada/*
+!entrada/.gitkeep
+robos/node_modules/
+robos/perfis/
+robos/config.json

@@ -10,6 +10,7 @@ import {
   ExtratoComissao,
   ExtratoImportado,
   FechamentoStatus,
+  PastaStatus,
   Previsao,
   ImportacaoPlanilha,
   PainelPagar,
@@ -145,6 +146,12 @@ export class Api {
     const form = new FormData();
     form.append('arquivo', arquivo);
     return this.http.post<FechamentoStatus>(`${this.e(eid)}/fechamento/importar`, form);
+  }
+  pasta(eid: number) {
+    return this.http.get<PastaStatus>(`${this.e(eid)}/pasta`);
+  }
+  varrerPasta(eid: number) {
+    return this.http.post<PastaStatus>(`${this.e(eid)}/pasta/varrer`, {});
   }
   previsao(eid: number, meses: number) {
     return this.http.get<Previsao>(`${this.e(eid)}/comissoes/previsao`, {
