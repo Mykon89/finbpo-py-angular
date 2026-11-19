@@ -110,7 +110,12 @@ def gerar_categorias(db: Session, entidade_id: int, dias: int = 120) -> int:
     ).all()
     grupos: dict[str, list[Transacao]] = defaultdict(list)
     rotulo: dict[str, str] = {}
+    from app.models import Titulo, TipoTitulo
+
+    controla_pagar = db.scalar(select(Titulo.id).where(Titulo.entidade_id == entidade_id, Titulo.tipo == TipoTitulo.PAGAR).limit(1))
     for t in trs:
+        if controla_pagar and t.valor < 0:
+            continue  # débito sem conta é perguntado pela conciliação do PAGAR (já pede a categoria)
         k, r = _grupo_transacao(t)
         if regra(db, entidade_id, "ignorar_lancamento", k):
             t.conciliada = True
@@ -378,6 +383,7 @@ RESPONDER = {
 
 
 def responder(db: Session, p: Pendencia, opcao: str, valores: dict | None, sempre: bool, usuario_id: int | None) -> Pendencia:
+    _carregar_extensoes()
     if p.status != "aberta":
         raise HTTPException(409, "Esta pendência já foi resolvida")
     validas = {o["id"] for o in p.opcoes}
@@ -392,6 +398,10 @@ def responder(db: Session, p: Pendencia, opcao: str, valores: dict | None, sempr
     p.regra_id = r.id if r else None
     db.commit()
     return p
+
+
+def _carregar_extensoes():
+    import app.services.conciliacao_pagar  # noqa: F401  (registra os tipos de pergunta do PAGAR)
 
 
 def apos_importar_banco(db: Session, entidade_id: int) -> None:

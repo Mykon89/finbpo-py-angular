@@ -257,9 +257,14 @@ export class Decisoes {
 
   rotuloCampo(c: string) {
     return (
-      { origem: 'Origem (ex.: KETTE)', produtor: 'Produtora', parceiro: 'Parceiro', ramo: 'Ramo' }[
-        c
-      ] ?? c
+      {
+        origem: 'Origem (ex.: KETTE)',
+        produtor: 'Produtora',
+        parceiro: 'Parceiro',
+        ramo: 'Ramo',
+        fornecedor: 'Nome do fornecedor ou sócio',
+        descricao: 'Descrição da conta (opcional)',
+      }[c] ?? c
     );
   }
 

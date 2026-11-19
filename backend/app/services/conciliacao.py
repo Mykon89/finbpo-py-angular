@@ -89,6 +89,8 @@ def conciliar_entidade(db: Session, entidade_id: int, tolerancia: int | None = N
     res = ResultadoConciliacao(0, 0, 0)
     usados: set[int] = set()
     for trn in pendentes:
+        if trn.valor < 0:
+            continue  # débitos: conciliacao_pagar (6 passadas do script, com aprendizado)
         cands = [t for t in candidatos(db, entidade_id, trn, tol) if t.id not in usados]
         if len(cands) > 1 and trn.contraparte_id:
             # Vários títulos com o mesmo valor: desempata por quem pagou/recebeu
@@ -104,4 +106,9 @@ def conciliar_entidade(db: Session, entidade_id: int, tolerancia: int | None = N
         else:
             res.sem_candidato += 1
     db.commit()
+    from app.services.conciliacao_pagar import conciliar_pagar
+
+    pg = conciliar_pagar(db, entidade_id)
+    res.conciliadas += pg["conciliados"] + pg["lancados_automaticamente"]
+    res.sem_candidato += pg["sem_conta"]
     return res

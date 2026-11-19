@@ -3,7 +3,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import close_all_sessions, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
@@ -43,6 +43,7 @@ def client():
         c.headers["Authorization"] = f"Bearer {token['access_token']}"
         yield c
     app.dependency_overrides.clear()
+    close_all_sessions()  # sessões abertas direto pelos testes travariam o DROP no Postgres
     engine.dispose()
 
 
