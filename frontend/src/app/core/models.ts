@@ -437,3 +437,88 @@ export interface PastaStatus {
   entidade_padrao: number | null;
   arquivos: ArquivoMonitorado[];
 }
+
+export interface UsuarioEu {
+  id: number;
+  nome: string;
+  email: string;
+  papel: 'admin' | 'leitor';
+  areas: string[];
+  somente_leitura: boolean;
+  grupo: string | null;
+}
+
+export interface OpcaoPendencia {
+  id: string;
+  rotulo: string;
+  campos?: string[];
+}
+
+export interface Pendencia {
+  id: number;
+  tipo: string;
+  tipo_rotulo: string;
+  titulo: string;
+  descricao: string | null;
+  opcoes: OpcaoPendencia[];
+  sugestao: string | null;
+  status: string;
+  ocorrencias: number;
+  criada_em: string;
+  resolvida_em: string | null;
+  resposta: { opcao: string; sempre: boolean } | null;
+}
+
+export interface ResumoPendencias {
+  abertas: number;
+  por_tipo: Record<string, number>;
+  resolvidas_sozinho_no_mes: number;
+  perguntas_no_mes: number;
+  automatico_pct: number | null;
+}
+
+export interface Aprendido {
+  id: string;
+  tipo: string;
+  descricao: string;
+  ativa: boolean;
+  vezes_aplicada: number | null;
+  criada_em: string | null;
+}
+
+export interface Area {
+  codigo: string;
+  rotulo: string;
+}
+
+export interface GrupoAcesso {
+  id?: number;
+  nome: string;
+  descricao: string | null;
+  areas: string[];
+  todas_entidades: boolean;
+  entidades: number[];
+  usuarios?: number;
+}
+
+export interface UsuarioAdmin {
+  id: number;
+  nome: string;
+  email: string;
+  papel: 'admin' | 'leitor';
+  grupo_id: number | null;
+  ativo: boolean;
+  criado_em: string;
+}
+
+export interface EventoAuditoria {
+  id: number;
+  quando: string;
+  usuario: string | null;
+  acao: string;
+  metodo: string | null;
+  caminho: string;
+  entidade_id: number | null;
+  status: number | null;
+  ip: string | null;
+}

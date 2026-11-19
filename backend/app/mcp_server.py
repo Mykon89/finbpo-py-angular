@@ -1,3 +1,4 @@
+import re
 """Conector MCP: deixa o Claude (Desktop ou Code, pela assinatura do usuário) ler e categorizar lançamentos.
 
 Endpoint: POST /mcp  —  cabeçalho `Authorization: Bearer <MCP_TOKEN>`.
@@ -15,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.config import settings
+from app.cripto import e_cpf, mascarar_cpf
 from app.db import SessionLocal
 from app.models import Categoria, ContaFinanceira, Entidade, StatusTitulo, TipoTitulo, Titulo, Transacao
 from app.services.categorizacao import aplicar_regras, criar_regra_de, sugerir
@@ -39,6 +41,30 @@ mcp = FastMCP(
 
 def abrir_sessao():
     return SessionLocal()
+
+
+_CPF_TEXTO = re.compile(r"(?<!\d)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?!\d)")
+
+
+def _iniciais(nome: str) -> str:
+    return " ".join(p[0] + "." for p in nome.split() if p)
+
+
+def _protegido(t: Transacao) -> dict:
+    """LGPD: com MCP_MASCARAR_PF (padrão), CPF e nome de pessoa física vão mascarados para o Claude.
+    CNPJ e nome de empresa seguem completos (são o que ajuda a categorizar)."""
+    nome, doc, desc, comp = t.contraparte_nome, t.contraparte_documento, t.descricao, t.complemento
+    if settings.mcp_mascarar_pf:
+        pf = e_cpf(doc)
+        if pf and nome:
+            desc = desc.replace(nome, _iniciais(nome)) if desc else desc
+            comp = comp.replace(nome, _iniciais(nome)) if comp else comp
+            nome = _iniciais(nome)
+        doc = mascarar_cpf(doc)
+        desc = _CPF_TEXTO.sub("***.***.***-**", desc or "")
+        comp = _CPF_TEXTO.sub("***.***.***-**", comp) if comp else comp
+    return {"descricao": desc, "complemento": comp, "contraparte": nome, "contraparte_documento": doc,
+            "pessoa_fisica": e_cpf(t.contraparte_documento)}
 
 
 def _num(v: Decimal | None) -> float | None:
@@ -95,10 +121,7 @@ def lancamentos_sem_categoria(
                     "data": t.data.isoformat(),
                     "conta": conta,
                     "valor": _num(t.valor),
-                    "descricao": t.descricao,
-                    "complemento": t.complemento,
-                    "contraparte": t.contraparte_nome,
-                    "contraparte_documento": t.contraparte_documento,
+                    **_protegido(t),
                     "sugestao_interna": {"categoria_id": s.categoria_id, "categoria": s.categoria, "confianca": s.confianca}
                     if s
                     else None,
@@ -160,6 +183,39 @@ def resumo_do_mes(entidade_id: int, ano: int, mes: int) -> dict:
 
 
 _estado: dict = {"gerenciador": None}
+
+
+@mcp.tool()
+def ver_pendencias(entidade_id: int, limite: int = 30) -> list[dict]:
+    """Perguntas abertas na Central de decisões (situações que o sistema não soube resolver sozinho), com as opções."""
+    from app.models import Pendencia
+    from app.services.decisoes import TIPOS
+
+    with abrir_sessao() as db:
+        ps = db.scalars(select(Pendencia).where(Pendencia.entidade_id == entidade_id, Pendencia.status == "aberta")
+                        .order_by(Pendencia.id).limit(max(1, min(limite, 100))))
+        cpf = _CPF_TEXTO
+        return [{"pendencia_id": p.id, "tipo": TIPOS.get(p.tipo, p.tipo), "pergunta": cpf.sub("***", p.titulo),
+                 "detalhe": cpf.sub("***", p.descricao or ""), "opcoes": [{"opcao": o["id"], "rotulo": o["rotulo"], "campos": o.get("campos", [])} for o in p.opcoes],
+                 "sugestao": p.sugestao} for p in ps]
+
+
+@mcp.tool()
+def responder_pendencia(entidade_id: int, pendencia_id: int, opcao: str, valores: dict | None = None, sempre: bool = True) -> dict:
+    """Responde uma pergunta da Central de decisões. sempre=True cria a regra para os próximos casos iguais.
+    Use só a opção que o usuário confirmou; em 'campos', informe os valores (ex.: categoria_id, origem, ramo)."""
+    from app.models import Pendencia
+    from app.services import decisoes
+
+    with abrir_sessao() as db:
+        p = db.get(Pendencia, pendencia_id)
+        if not p or p.entidade_id != entidade_id:
+            return {"erro": "pendência não encontrada"}
+        try:
+            p = decisoes.responder(db, p, opcao, valores or {}, sempre, None)
+        except Exception as e:  # noqa: BLE001
+            return {"erro": getattr(e, "detail", str(e))}
+        return {"status": p.status, "regra_criada": bool(p.regra_id)}
 
 
 @asynccontextmanager

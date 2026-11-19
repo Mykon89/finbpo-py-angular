@@ -30,6 +30,7 @@ from app.schemas import (
     TransacaoLer,
     VinculoManual,
 )
+from app.services import decisoes
 from app.services.categorizacao import aplicar_regras, criar_regra_de, sugerir
 from app.services.complemento import ArquivoInvalido, ler_complemento
 from app.services.conciliacao import candidatos, conciliar_entidade, vincular
@@ -222,6 +223,7 @@ def _gravar(db, entidade_id: int, conta: ContaFinanceira, extrato: ExtratoOFX, a
 
     categorizadas = aplicar_regras(db, entidade_id)
     conc = conciliar_entidade(db, entidade_id)
+    decisoes.apos_importar_banco(db, entidade_id)  # créditos x comissões e perguntas do que ficou sem categoria
     return ImportacaoResultado(
         importacao_id=imp.id,
         conta_id=conta.id,

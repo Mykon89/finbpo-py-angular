@@ -16,6 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.cripto import Documento
 from app.db import Base
 
 Dinheiro = Numeric(14, 2)
@@ -105,6 +106,11 @@ class Usuario(Base):
     email: Mapped[str] = mapped_column(String(180), unique=True, index=True)
     senha_hash: Mapped[str] = mapped_column(String(255))
     ativo: Mapped[bool] = mapped_column(default=True)
+    # admin edita tudo; leitor (diretoria/colaboradores) só vê as áreas e empresas do grupo
+    papel: Mapped[str] = mapped_column(String(10), default="admin", server_default="admin")
+    grupo_id: Mapped[int | None] = mapped_column(ForeignKey("grupo_acesso.id", ondelete="SET NULL"))
+
+    grupo: Mapped["GrupoAcesso | None"] = relationship(lazy="joined")
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -116,7 +122,7 @@ class Entidade(Base):
     tipo: Mapped[TipoEntidade] = mapped_column(_enum(TipoEntidade))
     segmento: Mapped[Segmento] = mapped_column(_enum(Segmento))
     nome: Mapped[str] = mapped_column(String(160))  # nome de exibição
-    documento: Mapped[str | None] = mapped_column(String(20))  # CNPJ/CPF, só dígitos
+    documento: Mapped[str | None] = mapped_column(Documento())  # CNPJ/CPF, só dígitos (CPF cifrado)
     email: Mapped[str | None] = mapped_column(String(180))
     telefone: Mapped[str | None] = mapped_column(String(30))
     ativo: Mapped[bool] = mapped_column(default=True)
@@ -181,7 +187,7 @@ class Contraparte(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
     nome: Mapped[str] = mapped_column(String(160))
-    documento: Mapped[str | None] = mapped_column(String(20))
+    documento: Mapped[str | None] = mapped_column(Documento())
 
 
 class ContaFinanceira(Base):
@@ -220,7 +226,7 @@ class Transacao(Base):
     # Quem pagou/recebeu: vem do próprio OFX (quando o banco informa) ou de XLSX/PDF complementar
     contraparte_id: Mapped[int | None] = mapped_column(ForeignKey("contraparte.id", ondelete="SET NULL"), index=True)
     contraparte_nome: Mapped[str | None] = mapped_column(String(160))
-    contraparte_documento: Mapped[str | None] = mapped_column(String(14))
+    contraparte_documento: Mapped[str | None] = mapped_column(Documento())
     complemento: Mapped[str | None] = mapped_column(String(255))  # descrição mais completa do XLSX/PDF
 
     conta: Mapped[ContaFinanceira] = relationship()
@@ -347,6 +353,7 @@ class ExtratoComissao(Base):
     importado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     recebido_valor: Mapped[Decimal | None] = mapped_column(Dinheiro)
     recebido_em: Mapped[date | None] = mapped_column(Date)
+    transacao_id: Mapped[int | None] = mapped_column(ForeignKey("transacao.id", ondelete="SET NULL"))  # crédito no banco
 
 
 class Comissao(Base):
@@ -417,3 +424,91 @@ class ArquivoMonitorado(Base):
     mensagem: Mapped[str | None] = mapped_column(Text)
     extratos: Mapped[str | None] = mapped_column(String(255))  # códigos gravados
     processado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GrupoAcesso(Base):
+    """Política de acesso de leitores: quais áreas e quais empresas podem ver (nunca editam)."""
+
+    __tablename__ = "grupo_acesso"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nome: Mapped[str] = mapped_column(String(80), unique=True)
+    descricao: Mapped[str | None] = mapped_column(String(255))
+    areas: Mapped[list] = mapped_column(JSON, default=list)
+    todas_entidades: Mapped[bool] = mapped_column(default=False)
+    entidades: Mapped[list] = mapped_column(JSON, default=list)  # ids, quando não for todas
+
+
+class EventoAuditoria(Base):
+    """Quem fez o quê e quando (LGPD: rastreabilidade do tratamento). Sem conteúdo dos dados."""
+
+    __tablename__ = "evento_auditoria"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    quando: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id", ondelete="SET NULL"), index=True)
+    acao: Mapped[str] = mapped_column(String(20))  # login / login_falhou / leitura / criacao / alteracao / exclusao / exportacao / anonimizacao
+    metodo: Mapped[str | None] = mapped_column(String(8))
+    caminho: Mapped[str] = mapped_column(String(255))
+    entidade_id: Mapped[int | None] = mapped_column()
+    status: Mapped[int | None] = mapped_column()
+    ip: Mapped[str | None] = mapped_column(String(45))
+    detalhe: Mapped[str | None] = mapped_column(String(255))
+
+
+class Pendencia(Base):
+    """Situação que o sistema não sabe resolver sozinho: pergunta ao usuário e aprende com a resposta."""
+
+    __tablename__ = "pendencia"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
+    tipo: Mapped[str] = mapped_column(String(30), index=True)
+    chave: Mapped[str] = mapped_column(String(255))  # agrupa casos iguais (mesma contraparte, mesmo cliente...)
+    titulo: Mapped[str] = mapped_column(String(255))
+    descricao: Mapped[str | None] = mapped_column(Text)
+    contexto: Mapped[dict] = mapped_column(JSON, default=dict)
+    opcoes: Mapped[list] = mapped_column(JSON, default=list)
+    sugestao: Mapped[str | None] = mapped_column(String(60))
+    status: Mapped[str] = mapped_column(String(12), default="aberta", index=True)  # aberta / resolvida / descartada
+    resposta: Mapped[dict | None] = mapped_column(JSON)
+    regra_id: Mapped[int | None] = mapped_column(ForeignKey("regra_aprendida.id", ondelete="SET NULL"))
+    ocorrencias: Mapped[int] = mapped_column(default=1)
+    criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolvida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolvida_por: Mapped[int | None] = mapped_column(ForeignKey("usuario.id", ondelete="SET NULL"))
+
+
+class RegraAprendida(Base):
+    """Decisão que vira regra: a próxima situação igual é resolvida sem perguntar."""
+
+    __tablename__ = "regra_aprendida"
+    __table_args__ = (UniqueConstraint("entidade_id", "tipo", "chave", name="uq_regra_aprendida"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
+    tipo: Mapped[str] = mapped_column(String(30), index=True)
+    chave: Mapped[str] = mapped_column(String(255))
+    descricao: Mapped[str] = mapped_column(String(255))  # em português, para a tela "O que o sistema aprendeu"
+    acao: Mapped[dict] = mapped_column(JSON, default=dict)
+    ativa: Mapped[bool] = mapped_column(default=True)
+    vezes_aplicada: Mapped[int] = mapped_column(default=0)
+    ultima_aplicacao: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    criada_por: Mapped[int | None] = mapped_column(ForeignKey("usuario.id", ondelete="SET NULL"))
+
+
+class ConexaoBancaria(Base):
+    """Fonte automática de extrato bancário (hoje: OFX na pasta monitorada; futuro: Open Finance, API do banco)."""
+
+    __tablename__ = "conexao_bancaria"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
+    conta_id: Mapped[int | None] = mapped_column(ForeignKey("conta_financeira.id", ondelete="SET NULL"))
+    provedor: Mapped[str] = mapped_column(String(30))  # ofx_pasta / pluggy / belvo / sicoob_api
+    status: Mapped[str] = mapped_column(String(20), default="ativa")  # ativa / expirada / erro / pausada
+    consentimento_expira_em: Mapped[date | None] = mapped_column(Date)
+    cursor: Mapped[str | None] = mapped_column(String(255))  # até onde já leu (data, id do provedor)
+    ultima_sincronizacao: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    erro: Mapped[str | None] = mapped_column(Text)

@@ -191,3 +191,18 @@ th.num {
     color: #f3d27a;
   }
 }
+
+/* Leitores (diretoria/colaboradores): sem botões de edição. O servidor também bloqueia qualquer alteração. */
+.somente-leitura .primario,
+.somente-leitura .botao,
+.somente-leitura .perigo,
+.somente-leitura .so-admin,
+.somente-leitura input[type='file'],
+.somente-leitura label:has(> input[type='file']) {
+  display: none !important;
+}
+.somente-leitura input.vinculo,
+.somente-leitura table select {
+  pointer-events: none;
+  opacity: 0.7;
+}

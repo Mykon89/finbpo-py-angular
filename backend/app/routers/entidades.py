@@ -4,6 +4,7 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import func, select
 
+from app.acesso import pode_ver_entidade
 from app.deps import DB, EntidadeDep, UsuarioAtual, obter_do_escopo
 from app.models import (
     Categoria,
@@ -42,11 +43,11 @@ router = APIRouter(prefix="/entidades", tags=["entidades"])
 
 
 @router.get("", response_model=list[EntidadeLer])
-def listar(db: DB, _: UsuarioAtual, incluir_inativas: bool = False):
+def listar(db: DB, usuario: UsuarioAtual, incluir_inativas: bool = False):
     stmt = select(Entidade).order_by(Entidade.nome)
     if not incluir_inativas:
         stmt = stmt.where(Entidade.ativo.is_(True))
-    return db.scalars(stmt).all()
+    return [e for e in db.scalars(stmt).all() if pode_ver_entidade(usuario, usuario.grupo, e.id)]
 
 
 def _normalizar_documento(db, tipo: TipoEntidade, documento: str | None, ignorar_id: int | None = None) -> str | None:

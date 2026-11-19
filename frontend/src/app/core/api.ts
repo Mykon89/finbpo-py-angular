@@ -2,6 +2,14 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
   AnaliseOFX,
+  Aprendido,
+  Area,
+  EventoAuditoria,
+  GrupoAcesso,
+  Pendencia,
+  ResumoPendencias,
+  UsuarioAdmin,
+  UsuarioEu,
   Aging,
   Categoria,
   Comissao,
@@ -46,6 +54,89 @@ export class Api {
 
   private e(id: number) {
     return `${this.base}/entidades/${id}`;
+  }
+
+  // perfil, decisões e aprendizado
+  eu() {
+    return this.http.get<UsuarioEu>(`${this.base}/auth/eu`);
+  }
+  pendencias(eid: number, status = 'aberta') {
+    return this.http.get<Pendencia[]>(`${this.e(eid)}/pendencias`, { params: params({ status }) });
+  }
+  resumoPendencias(eid: number) {
+    return this.http.get<ResumoPendencias>(`${this.e(eid)}/pendencias/resumo`);
+  }
+  responderPendencia(eid: number, id: number, opcao: string, valores: object, sempre: boolean) {
+    return this.http.post<Pendencia>(`${this.e(eid)}/pendencias/${id}/responder`, {
+      opcao,
+      valores,
+      sempre,
+    });
+  }
+  descartarPendencia(eid: number, id: number) {
+    return this.http.post<Pendencia>(`${this.e(eid)}/pendencias/${id}/descartar`, {});
+  }
+  verificarPendencias(eid: number) {
+    return this.http.post<object>(`${this.e(eid)}/pendencias/verificar`, {});
+  }
+  aprendizado(eid: number) {
+    return this.http.get<Aprendido[]>(`${this.e(eid)}/aprendizado`);
+  }
+  alterarAprendido(eid: number, id: string, ativa: boolean) {
+    return this.http.patch(`${this.e(eid)}/aprendizado/${id}`, { ativa });
+  }
+  excluirAprendido(eid: number, id: string) {
+    return this.http.delete<void>(`${this.e(eid)}/aprendizado/${id}`);
+  }
+
+  // administração
+  areas() {
+    return this.http.get<Area[]>(`${this.base}/admin/areas`);
+  }
+  grupos() {
+    return this.http.get<GrupoAcesso[]>(`${this.base}/admin/grupos`);
+  }
+  salvarGrupo(g: GrupoAcesso) {
+    return g.id
+      ? this.http.put<GrupoAcesso>(`${this.base}/admin/grupos/${g.id}`, g)
+      : this.http.post<GrupoAcesso>(`${this.base}/admin/grupos`, g);
+  }
+  removerGrupo(id: number) {
+    return this.http.delete<void>(`${this.base}/admin/grupos/${id}`);
+  }
+  usuarios() {
+    return this.http.get<UsuarioAdmin[]>(`${this.base}/admin/usuarios`);
+  }
+  criarUsuario(u: object) {
+    return this.http.post<UsuarioAdmin>(`${this.base}/admin/usuarios`, u);
+  }
+  alterarUsuario(id: number, u: object) {
+    return this.http.patch<UsuarioAdmin>(`${this.base}/admin/usuarios/${id}`, u);
+  }
+  auditoria(filtro: { usuario_id?: number; acao?: string; de?: string; ate?: string }) {
+    return this.http.get<EventoAuditoria[]>(`${this.base}/admin/auditoria`, {
+      params: params(filtro),
+    });
+  }
+  titular(busca: string) {
+    return this.http.get<{
+      ocorrencias: Record<string, number>;
+      amostra: Record<string, Record<string, string>[]>;
+    }>(`${this.base}/admin/privacidade/titular`, { params: params({ busca }) });
+  }
+  exportarTitular(busca: string) {
+    return this.http.get<object>(`${this.base}/admin/privacidade/titular/exportar`, {
+      params: params({ busca }),
+    });
+  }
+  anonimizarTitular(busca: string) {
+    return this.http.post<{ registros_anonimizados: number }>(
+      `${this.base}/admin/privacidade/titular/anonimizar`,
+      {
+        busca,
+        confirmar: true,
+      },
+    );
   }
 
   // entidades

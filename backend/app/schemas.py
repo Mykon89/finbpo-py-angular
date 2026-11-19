@@ -37,6 +37,10 @@ class UsuarioLer(ORM):
     id: int
     nome: str
     email: str
+    papel: str = "admin"
+    areas: list[str] = []
+    somente_leitura: bool = False
+    grupo: str | None = None
 
 
 # --- entidade

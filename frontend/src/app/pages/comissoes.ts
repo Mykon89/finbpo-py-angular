@@ -42,7 +42,7 @@ import {
       <p class="erro">{{ erro() }}</p>
     }
 
-    <details class="cartao fech" [open]="!fech()?.propostas">
+    <details class="cartao fech so-admin" [open]="!fech()?.propostas">
       <summary>
         <strong>FECHAMENTO DE PROPOSTAS</strong>
         @if (fech(); as f) {
@@ -100,7 +100,7 @@ import {
     </details>
 
     @if (pasta(); as pst) {
-      <details class="cartao fech">
+      <details class="cartao fech so-admin">
         <summary>
           <strong>Pasta monitorada</strong>
           <span class="sutil">

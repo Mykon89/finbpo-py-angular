@@ -1,6 +1,7 @@
 """Grava extratos de seguradoras como ExtratoComissao + linhas de Comissao, com vínculo pelo histórico."""
 
 import re
+from collections import defaultdict
 import unicodedata
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Comissao, ExtratoComissao, PropostaFechamento
+from app.services import decisoes
 from app.services.fechamento import norm_seguradora
 from app.services.extratos_seguradoras import Extrato, parcela_texto
 from app.services.planilha import chave_comissao
@@ -240,6 +242,8 @@ def gravar(db: Session, entidade_id: int, extratos: list[Extrato], arquivo: str)
     vinc = Vinculos(db, entidade_id)
     fech = Fechamento(db, entidade_id)
     saida = []
+    novas: list = []
+    pendentes_div: list = []
     for e in extratos:
         r = ResultadoExtrato(arquivo, e.codigo, e.seguradora, e.data.isoformat(), e.bruto, e.iss, e.liquido, e.linhas,
                              divergencias=list(e.divergencias), avisos=list(e.avisos))
@@ -288,10 +292,13 @@ def gravar(db: Session, entidade_id: int, extratos: list[Extrato], arquivo: str)
                         g.cliente = antigo  # nome já cadastrado na BASE prevalece
                     if g.ramo == "?" and h.ramo:
                         g.ramo = h.ramo
+                aprendida = None if (f or h) else decisoes.regra(db, entidade_id, "vinculo", chave_vinculo(e.seguradora, g.cliente, g.ramo))
                 if f or h:
                     origem, produtor, parceiro = f.v if f else (x.upper() if x else None for x in h.v)
                     if motivo:
                         obs.insert(0, motivo)
+                elif aprendida:
+                    origem, produtor, parceiro = (aprendida.acao.get(k) for k in ("origem", "produtor", "parceiro"))
                 else:
                     origem = produtor = parceiro = None
                     obs.insert(0, SEM_VINCULO)
@@ -301,6 +308,10 @@ def gravar(db: Session, entidade_id: int, extratos: list[Extrato], arquivo: str)
                 produtor = produtor_valido(produtor)
                 if n - 1 in em_par:
                     parceiro = PARCEIRO_COCORRETAGEM
+            if g.ramo == "?":
+                ra = decisoes.regra(db, entidade_id, "ramo", chave_ramo(e.seguradora, g.apolice, g.cliente))
+                if ra:
+                    g.ramo = ra.acao["ramo"]
             if g.ramo == "?" and g.ramo_padrao:
                 g.ramo = g.ramo_padrao
             if g.ramo == "?":
@@ -310,8 +321,7 @@ def gravar(db: Session, entidade_id: int, extratos: list[Extrato], arquivo: str)
             ptxt = parcela_texto(e, g)
             pnum = next((int(x) for x in re.findall(r"\d+", ptxt)), None) if ptxt else None
             imp = Decimal("0") if g.debito or g.sem_imposto else _imposto(g.bruta)
-            db.add(
-                Comissao(
+            nova = Comissao(
                     entidade_id=entidade_id,
                     extrato_id=ext.id,
                     data=g.data or e.data,
@@ -330,7 +340,61 @@ def gravar(db: Session, entidade_id: int, extratos: list[Extrato], arquivo: str)
                     parcela_texto=ptxt or None,
                     hash=chave_comissao(e.codigo, g.apolice, g.cliente, g.bruta, n),
                 )
-            )
+            db.add(nova)
+            novas.append((e, ext, nova))
             r.gravadas += 1
+        if e.divergencias:
+            pendentes_div.append((e, ext))
+    db.flush()
+    _perguntas_da_importacao(db, entidade_id, novas, pendentes_div)
     db.commit()
     return saida
+
+
+def chave_vinculo(seguradora: str, cliente: str, ramo: str | None) -> str:
+    return f"{norm_seguradora(seguradora)}|{_nome_chave(cliente)}|{cat_ramo(ramo)}"
+
+
+def chave_ramo(seguradora: str, apolice: str | None, cliente: str) -> str:
+    dig = re.sub(r"\D", "", apolice or "")
+    return f"{norm_seguradora(seguradora)}|" + (f"A{dig}" if len(dig) >= 5 else f"N{_nome_chave(cliente)}")
+
+
+def _perguntas_da_importacao(db: Session, entidade_id: int, novas: list, divergentes: list) -> None:
+    """O que a importação não resolveu vira pergunta na Central de decisões (ou é resolvido por regra aprendida)."""
+    combos = None
+    vinc: dict[str, list] = defaultdict(list)
+    ramo: dict[str, list] = defaultdict(list)
+    neg: dict[str, list] = defaultdict(list)
+    for e, ext, c in novas:
+        obs = c.observacao or ""
+        if obs.startswith(SEM_VINCULO) or f"| {SEM_VINCULO}" in obs:
+            vinc[chave_vinculo(c.seguradora, c.cliente or "", c.ramo)].append(c)
+        if "VERIFICAR RAMO" in obs:
+            ramo[chave_ramo(c.seguradora, c.apolice, c.cliente or "")].append(c)
+        if "NEGATIVO:" in obs:
+            r = decisoes.regra(db, entidade_id, "negativo", c.seguradora)
+            if r:
+                decisoes.aplicar_negativo(c, r.acao["tratamento"])
+            else:
+                neg[ext.codigo].append(c)
+    for k, cs in vinc.items():
+        combos = combos if combos is not None else decisoes.combos_vinculo(db, entidade_id)
+        decisoes.perguntar_vinculo(db, entidade_id, k, cs[0].cliente or "", cs[0].seguradora, [c.id for c in cs], combos)
+    for k, cs in ramo.items():
+        decisoes.perguntar(db, entidade_id, "ramo", k, f"Qual o ramo de {cs[0].cliente} ({cs[0].seguradora})?",
+                           f"Apólice {cs[0].apolice or '—'}. O extrato não informa um ramo conhecido.",
+                           {"ids": [c.id for c in cs], "cliente": cs[0].cliente, "seguradora": cs[0].seguradora},
+                           [{"id": x, "rotulo": x.title(), **({"campos": ["ramo"]} if x == "OUTRO" else {})} for x in decisoes.RAMOS])
+    for cod, cs in neg.items():
+        opcoes = [{"id": k, "rotulo": v} for k, v in decisoes.TRATAMENTO_NEGATIVO.items()]
+        decisoes.perguntar(db, entidade_id, "negativo", cod, f"{len(cs)} comissão(ões) negativa(s) no extrato {cod}",
+                           "; ".join(f"{c.cliente}: R$ {c.bruta}" for c in cs[:5]),
+                           {"ids": [c.id for c in cs], "seguradora": cs[0].seguradora}, opcoes, "ESTORNO")
+    for e, ext in divergentes:
+        if decisoes.regra(db, entidade_id, "aceitar_divergencia", e.seguradora):
+            continue
+        decisoes.perguntar(db, entidade_id, "divergencia", ext.codigo, f"Extrato {ext.codigo} com diferença",
+                           "; ".join(e.divergencias), {"extrato_id": ext.id, "seguradora": e.seguradora},
+                           [{"id": "aceitar", "rotulo": "Está certo assim (aceitar)"},
+                            {"id": "excluir", "rotulo": "Excluir o extrato para reimportar"}], "aceitar")

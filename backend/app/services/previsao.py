@@ -9,7 +9,8 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Comissao, PropostaFechamento
+from app.models import Comissao, PropostaFechamento, RegraAprendida
+from app.services import decisoes
 from app.services.comissoes import _cat_ok, _nome_chave, cat_ramo, nomes_batem
 from app.services.fechamento import norm_seguradora
 
@@ -61,6 +62,9 @@ def classificar_novos(db: Session, entidade_id: int) -> int:
     linhas = db.scalars(select(Comissao).where(Comissao.entidade_id == entidade_id).order_by(Comissao.data, Comissao.id)).all()
     vistos: dict[tuple, date] = {}
     marcados = 0
+    respostas = {r.chave: bool(r.acao.get("novo")) for r in db.scalars(select(RegraAprendida).where(
+        RegraAprendida.entidade_id == entidade_id, RegraAprendida.tipo == "novo_negocio", RegraAprendida.ativa.is_(True)))}
+    duvidas: dict[str, Comissao] = {}
     # nos 2 primeiros meses do histórico não dá para saber se o contrato é novo (já pagava antes do sistema)
     inicio_historico: dict[str, date] = {}
     for c in linhas:
@@ -79,12 +83,22 @@ def classificar_novos(db: Session, entidade_id: int) -> int:
         elif norm_seguradora(c.seguradora) == "SULAMERICA":
             tipo = _tipo_fechamento(fech, c.seguradora, c.cliente or "", c.ramo or "", c.data) if fech else None
             novo = tipo == "NOVO" if c.data < inicio_historico[norm_seguradora(c.seguradora)] else (primeira_vez and tipo != "RENOVACAO")
+            chave_contrato = "|".join(map(str, chaves[-1]))
+            resposta = respostas.get(chave_contrato)
+            if resposta is not None:
+                novo = resposta  # o usuário já respondeu na Central de decisões
+            elif novo and tipo is None and c.data >= _mes(date.today(), -3):
+                duvidas.setdefault(chave_contrato, c)
         else:
             txt = c.parcela_texto or (str(c.parcela) if c.parcela is not None else "")
             novo = bool(_PARCELA_1.match(txt))
         if c.novo_negocio != novo:
             c.novo_negocio = novo
         marcados += novo
+    for k, c in duvidas.items():  # SulAmérica sem FECHAMENTO: 1ª comissão do contrato, mas não dá para ter certeza
+        decisoes.perguntar(db, entidade_id, "novo_negocio", k, f"{c.cliente} ({c.seguradora}) é cliente novo?",
+                           f"1ª comissão deste contrato em {c.data:%m/%Y} e o cliente não está no FECHAMENTO.",
+                           {"comissao_id": c.id}, [{"id": "sim", "rotulo": "Sim, seguro novo"}, {"id": "nao", "rotulo": "Não, já era cliente"}], "sim")
     db.commit()
     return marcados
 

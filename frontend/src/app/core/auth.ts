@@ -18,6 +18,7 @@ export class Auth {
   private http = inject(HttpClient);
   private router = inject(Router);
   readonly token = signal<string | null>(lerToken());
+  readonly aoSair: (() => void)[] = [];
 
   login(email: string, senha: string) {
     const corpo = new URLSearchParams({ username: email, password: senha });
@@ -34,6 +35,7 @@ export class Auth {
 
   sair() {
     this.salvar(null);
+    this.aoSair.forEach((f) => f());
     this.router.navigateByUrl('/login');
   }
 

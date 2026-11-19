@@ -8,7 +8,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app import mcp_server
+from app.services import auditoria
 from app.config import settings
+
+settings.tarefas_automaticas = False  # nada de laço em segundo plano nos testes
 from app.main import app
 
 
@@ -31,6 +34,8 @@ def client():
 
     app.dependency_overrides[get_db] = _db
     mcp_server.abrir_sessao = Sessao
+    auditoria.abrir_sessao = Sessao
+    auditoria._papeis.clear()
     settings.mcp_token = "token-de-teste"
     with TestClient(app) as c:
         c.post("/api/auth/primeiro-acesso", json={"nome": "Admin", "email": "admin@finbpo.dev", "senha": "senha-forte"})
