@@ -17,6 +17,7 @@ import {
   ComplementoResultado,
   ExtratoComissao,
   ExtratoImportado,
+  FechamentoDados,
   FechamentoStatus,
   PastaStatus,
   Previsao,
@@ -87,6 +88,41 @@ export class Api {
   }
   excluirAprendido(eid: number, id: string) {
     return this.http.delete<void>(`${this.e(eid)}/aprendizado/${id}`);
+  }
+
+  // fechamento mensal e e-mail
+  fechamentoMensal(eid: number, ano: number, mes: number) {
+    return this.http.get<FechamentoDados>(`${this.e(eid)}/fechamento-mensal`, {
+      params: params({ ano, mes }),
+    });
+  }
+  fechamentoPdf(eid: number, ano: number, mes: number) {
+    return this.http.get(`${this.e(eid)}/fechamento-mensal/pdf`, {
+      params: params({ ano, mes }),
+      responseType: 'blob',
+    });
+  }
+  salvarAnalise(eid: number, ano: number, mes: number, texto: string) {
+    return this.http.put(`${this.e(eid)}/fechamento-mensal/analise`, { ano, mes, texto });
+  }
+  statusEmail() {
+    return this.http.get<{
+      configurado: boolean;
+      destinatarios: string[];
+      hora: number;
+      dia_fechamento: number;
+    }>(`${this.base}/admin/email`);
+  }
+  previaAlerta() {
+    return this.http.get(`${this.base}/admin/alertas/previa`, { responseType: 'text' });
+  }
+  testarAlerta() {
+    return this.http.post<{ resultado: string }>(`${this.base}/admin/alertas/testar`, {});
+  }
+  enviarFechamento(ano: number, mes: number) {
+    return this.http.post<{ resultado: string }>(`${this.base}/admin/fechamento/enviar`, null, {
+      params: params({ ano, mes }),
+    });
   }
 
   // administração

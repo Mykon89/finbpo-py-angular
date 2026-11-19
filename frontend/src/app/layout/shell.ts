@@ -152,6 +152,7 @@ export class Shell implements OnInit {
   protected abertas = signal(0);
   protected readonly menu = [
     { link: '/painel', rotulo: 'Painel', area: 'painel' },
+    { link: '/fechamento-mes', rotulo: 'Fechamento do mês', area: 'painel' },
     { link: '/decisoes', rotulo: 'Central de decisões', area: 'decisoes' },
     { link: '/titulos/pagar', rotulo: 'Contas a pagar', area: 'pagar' },
     { link: '/titulos/receber', rotulo: 'Contas a receber', area: 'receber' },

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import admin, auth, decisoes, cnpj, corretagem, entidades, relatorios, titulos, transacoes
+from app.routers import admin, auth, decisoes, fechamento_mensal, cnpj, corretagem, entidades, relatorios, titulos, transacoes
 from app.mcp_server import app_mcp, ciclo_de_vida
 from app.acesso import autorizar
 import app.services.conciliacao_pagar  # noqa: F401  (registra os tipos de pergunta do PAGAR)
@@ -38,8 +38,9 @@ app.add_middleware(
 api = APIRouter(prefix="/api")
 api.include_router(auth.router)
 api.include_router(admin.router)
+api.include_router(fechamento_mensal.admin)
 protegido = [Depends(autorizar)]
-for r in (cnpj.router, entidades.router, titulos.router, transacoes.router, relatorios.router, corretagem.router, decisoes.router):
+for r in (cnpj.router, entidades.router, titulos.router, transacoes.router, relatorios.router, corretagem.router, decisoes.router, fechamento_mensal.router):
     api.include_router(r, dependencies=protegido)
 app.include_router(api)
 

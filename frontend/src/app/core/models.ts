@@ -522,3 +522,27 @@ export interface EventoAuditoria {
   status: number | null;
   ip: string | null;
 }
+
+export interface Sugestao2 {
+  titulo: string;
+  texto: string;
+  economia: string;
+}
+
+export interface FechamentoDados {
+  entidade: string;
+  rotulo: string;
+  receita: string;
+  despesas_total: string;
+  dre: { resultado_liquido: string; margem_liquida_pct: number | null };
+  resultado_anteriores: string[];
+  despesas: { categoria: string; valor: string; media_3m: string; variacao_pct: number | null }[];
+  atrasadas: { descricao: string; vencimento: string; saldo: string; dias: number }[];
+  proximos_30: string;
+  proximos_30_qtd: number;
+  descontos_obtidos: string;
+  comissoes: { bruta: string; anterior: string; novos_qtd: number; novos_valor: string } | null;
+  pendencias_abertas: number;
+  sugestoes: Sugestao2[];
+  analise_ia: string | null;
+}

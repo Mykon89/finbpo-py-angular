@@ -512,3 +512,30 @@ class ConexaoBancaria(Base):
     cursor: Mapped[str | None] = mapped_column(String(255))  # até onde já leu (data, id do provedor)
     ultima_sincronizacao: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     erro: Mapped[str | None] = mapped_column(Text)
+
+
+class AnaliseMensal(Base):
+    """Análise do fechamento escrita pelo Claude (pela assinatura, via conector MCP) — entra no PDF do mês."""
+
+    __tablename__ = "analise_mensal"
+    __table_args__ = (UniqueConstraint("entidade_id", "ano", "mes", name="uq_analise_mensal"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
+    ano: Mapped[int] = mapped_column()
+    mes: Mapped[int] = mapped_column()
+    texto: Mapped[str] = mapped_column(Text)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class RegistroEnvio(Base):
+    """Evita mandar o mesmo e-mail duas vezes (alerta do dia, fechamento do mês)."""
+
+    __tablename__ = "registro_envio"
+    __table_args__ = (UniqueConstraint("tipo", "referencia", name="uq_registro_envio"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tipo: Mapped[str] = mapped_column(String(30))
+    referencia: Mapped[str] = mapped_column(String(60))
+    enviado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    detalhe: Mapped[str | None] = mapped_column(String(255))

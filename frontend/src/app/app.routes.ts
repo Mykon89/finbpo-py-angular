@@ -38,6 +38,9 @@ export const routes: Routes = [
         import('./pages/conciliacao').then((m) => m.Conciliacao),
       ),
       pagina('entidades', 'entidades', () => import('./pages/entidades').then((m) => m.Entidades)),
+      pagina('fechamento-mes', 'painel', () =>
+        import('./pages/fechamento-mes').then((m) => m.FechamentoMes),
+      ),
       pagina('decisoes', 'decisoes', () => import('./pages/decisoes').then((m) => m.Decisoes)),
       pagina('aprendizado', 'aprendizado', () =>
         import('./pages/aprendizado').then((m) => m.Aprendizado),

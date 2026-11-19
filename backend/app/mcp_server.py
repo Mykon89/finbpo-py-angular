@@ -218,6 +218,38 @@ def responder_pendencia(entidade_id: int, pendencia_id: int, opcao: str, valores
         return {"status": p.status, "regra_criada": bool(p.regra_id)}
 
 
+@mcp.tool()
+def dados_fechamento(entidade_id: int, ano: int, mes: int) -> dict:
+    """Números do fechamento do mês (DRE, despesas por categoria x média de 3 meses, fornecedores, atrasos, comissões)
+    e as sugestões automáticas de economia. Use para escrever a análise do mês e grave com salvar_analise_fechamento."""
+    import json
+
+    from fastapi.encoders import jsonable_encoder
+
+    from app.models import Contraparte
+    from app.services.fechamento_mensal import dados
+
+    with abrir_sessao() as db:
+        d = jsonable_encoder(dados(db, entidade_id, ano, mes))
+        if settings.mcp_mascarar_pf:  # fornecedor pessoa física (CPF) vai só com iniciais
+            texto = json.dumps(d, ensure_ascii=False)
+            for c in db.scalars(select(Contraparte).where(Contraparte.entidade_id == entidade_id)):
+                if e_cpf(c.documento) and c.nome:
+                    texto = texto.replace(c.nome, _iniciais(c.nome))
+            d = json.loads(texto)
+        return d
+
+
+@mcp.tool()
+def salvar_analise_fechamento(entidade_id: int, ano: int, mes: int, texto: str) -> dict:
+    """Grava a análise do mês (texto corrido em português, com diagnóstico e sugestões de corte de gastos priorizadas
+    pelo valor). Ela passa a sair no PDF do fechamento, na seção "Análise do Claude"."""
+    from app.routers.fechamento_mensal import gravar_analise
+
+    with abrir_sessao() as db:
+        return {"ok": True, "id": gravar_analise(db, entidade_id, ano, mes, texto)}
+
+
 @asynccontextmanager
 async def ciclo_de_vida():
     """Um gerenciador por ciclo de vida da aplicação (o do SDK só pode rodar uma vez)."""

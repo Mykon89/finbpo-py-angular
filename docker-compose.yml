@@ -16,6 +16,7 @@ services:
 
   backend:
     build: ./backend
+    env_file: .env  # e-mail (SMTP_*), ALERTAS_*, DADOS_CHAVE etc. vêm do .env
     environment:
       DATABASE_URL: postgresql+psycopg://finbpo:${POSTGRES_PASSWORD:-finbpo}@db:5432/finbpo
       SECRET_KEY: ${SECRET_KEY:?defina SECRET_KEY no arquivo .env}

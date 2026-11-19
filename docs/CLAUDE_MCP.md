@@ -76,6 +76,11 @@ Com o Docker rodando, peça ao Claude, por exemplo:
 | `lancamentos_sem_categoria` | Pendentes, com descrição, quem pagou/recebeu e a sugestão do aprendizado interno |
 | `categorizar_lancamentos` | Grava as categorias (marcadas "por Claude" para revisão) e, se pedido, cria regras |
 | `resumo_do_mes` | DRE do mês e totais a pagar/receber |
+| `ver_pendencias` / `responder_pendencia` | Perguntas da Central de decisões (responda pelo chat) |
+| `dados_fechamento` / `salvar_analise_fechamento` | Números do mês e gravação da análise que sai no PDF do fechamento |
+
+Exemplo: *"Use o finbpo: leia o fechamento de outubro da Atual Prev, escreva uma análise curta com as 5 maiores
+oportunidades de corte de gastos (com valores) e salve."*
 
 Tudo que o Claude categoriza aparece como **"por Claude"** nas telas de Lançamentos e Conciliação.
 

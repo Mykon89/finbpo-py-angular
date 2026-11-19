@@ -26,6 +26,7 @@ AREAS: dict[str, str] = {
 
 # caminho (depois de /api/entidades/{id}) -> área
 _MAPA = [
+    (r"^/fechamento-mensal", "painel"),
     (r"^/comissoes/previsao", "previsao"),
     (r"^/(comissoes|extratos-comissao|fechamento|pasta|importar-planilha)", "comissoes"),
     (r"^/recorrencias", "recorrencias"),

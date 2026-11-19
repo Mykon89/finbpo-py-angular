@@ -153,6 +153,9 @@ async def vigiar() -> None:
             def _rodar():
                 with SessionLocal() as db:
                     varrer(db)
+                    from app.services import alertas
+
+                    alertas.tarefas(db)  # e-mail do dia e fechamento do mês (só manda uma vez)
                 if _ultimo_dia[0] != datetime.now().date():
                     _ultimo_dia[0] = datetime.now().date()
                     tarefas_diarias()
