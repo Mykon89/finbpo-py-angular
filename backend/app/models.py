@@ -539,3 +539,86 @@ class RegistroEnvio(Base):
     referencia: Mapped[str] = mapped_column(String(60))
     enviado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     detalhe: Mapped[str | None] = mapped_column(String(255))
+
+
+class PlanoComissao(Base):
+    """Regras de comissão de uma produtora (níveis, %, indicações, saúde pela planilha dela)."""
+
+    __tablename__ = "plano_comissao"
+    __table_args__ = (UniqueConstraint("entidade_id", "produtor", name="uq_plano_comissao"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entidade_id: Mapped[int] = mapped_column(ForeignKey("entidade.id", ondelete="CASCADE"), index=True)
+    produtor: Mapped[str] = mapped_column(String(60))  # como aparece na BASE (ex.: GIOVANNA)
+    nome: Mapped[str] = mapped_column(String(120))  # nome completo
+    ativo: Mapped[bool] = mapped_column(default=True)
+    niveis: Mapped[list] = mapped_column(JSON, default=list)  # [{nome, pct, pct_saude}] SEM META..DIAMANTE
+    regras: Mapped[dict] = mapped_column(JSON, default=dict)  # imposto_indicacao, pct_indicacao, desconto_cartao, saude_*
+    aliases_indicacao: Mapped[list] = mapped_column(JSON, default=list)  # nomes no PARCEIRO = indicação pessoal
+    excluir_ramos: Mapped[list] = mapped_column(JSON, default=list)  # ramos fora da base patrimonial
+    usa_planilha_saude: Mapped[bool] = mapped_column(default=False)
+    planilha_saude_id: Mapped[str | None] = mapped_column(String(120))
+    meses_para_pagar: Mapped[int] = mapped_column(default=1)  # competência M paga no mês M+n, 1 dia antes dos impostos
+    contraparte_id: Mapped[int | None] = mapped_column(ForeignKey("contraparte.id", ondelete="SET NULL"))
+    categoria_id: Mapped[int | None] = mapped_column(ForeignKey("categoria.id", ondelete="SET NULL"))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id", ondelete="SET NULL"))  # "Minha comissão"
+
+
+class MetaComissao(Base):
+    __tablename__ = "meta_comissao"
+    __table_args__ = (UniqueConstraint("plano_id", "ano", "mes", "tipo", name="uq_meta_comissao"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plano_id: Mapped[int] = mapped_column(ForeignKey("plano_comissao.id", ondelete="CASCADE"), index=True)
+    ano: Mapped[int] = mapped_column()
+    mes: Mapped[int] = mapped_column()
+    tipo: Mapped[str] = mapped_column(String(12))  # patrimonial / saude
+    faixas: Mapped[list] = mapped_column(JSON, default=list)  # PL de SEM META, BRONZE, PRATA, OURO, DIAMANTE
+
+
+class AjustePL(Base):
+    """Ajuste manual do PL do mês e clientes tirados da meta."""
+
+    __tablename__ = "ajuste_pl"
+    __table_args__ = (UniqueConstraint("plano_id", "ano", "mes", name="uq_ajuste_pl"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plano_id: Mapped[int] = mapped_column(ForeignKey("plano_comissao.id", ondelete="CASCADE"), index=True)
+    ano: Mapped[int] = mapped_column()
+    mes: Mapped[int] = mapped_column()
+    valor: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal("0"))
+    excluidos: Mapped[list] = mapped_column(JSON, default=list)  # chaves "SEGURADORA|cliente"
+
+
+class LinhaSaude(Base):
+    """Linha da planilha de saúde da produtora (ex.: "Relatório de Comissão - Saúde" da Fabiana)."""
+
+    __tablename__ = "linha_saude"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plano_id: Mapped[int] = mapped_column(ForeignKey("plano_comissao.id", ondelete="CASCADE"), index=True)
+    ano: Mapped[int] = mapped_column()
+    mes: Mapped[int] = mapped_column()
+    cliente: Mapped[str] = mapped_column(String(200))
+    operadora: Mapped[str | None] = mapped_column(String(80))
+    plano: Mapped[str | None] = mapped_column(String(40))  # PME / PF / ADESAO
+    fatura: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal("0"))
+    comissao: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal("0"))
+    adesao: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal("0"))
+    parcela: Mapped[int | None] = mapped_column()
+    indicacao: Mapped[str | None] = mapped_column(String(80))
+
+
+class ApuracaoComissao(Base):
+    """Resultado do mês e a conta a pagar gerada (para não duplicar e levar saldo negativo adiante)."""
+
+    __tablename__ = "apuracao_comissao"
+    __table_args__ = (UniqueConstraint("plano_id", "ano", "mes", name="uq_apuracao_comissao"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plano_id: Mapped[int] = mapped_column(ForeignKey("plano_comissao.id", ondelete="CASCADE"), index=True)
+    ano: Mapped[int] = mapped_column()
+    mes: Mapped[int] = mapped_column()
+    total: Mapped[Decimal] = mapped_column(Dinheiro, default=Decimal("0"))
+    titulo_id: Mapped[int | None] = mapped_column(ForeignKey("titulo.id", ondelete="SET NULL"))
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

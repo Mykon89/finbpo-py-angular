@@ -158,6 +158,12 @@ export class Shell implements OnInit {
     { link: '/titulos/receber', rotulo: 'Contas a receber', area: 'receber' },
     { link: '/recorrencias', rotulo: 'Recorrências', area: 'recorrencias' },
     { link: '/comissoes', rotulo: 'Comissões', area: 'comissoes' },
+    {
+      link: '/comissao-produtoras',
+      rotulo: 'Comissões das produtoras',
+      area: 'comissao_produtoras',
+    },
+    { link: '/minha-comissao', rotulo: 'Minha comissão', area: 'minha_comissao' },
     { link: '/previsao', rotulo: 'Previsão de recebimentos', area: 'previsao' },
     { link: '/importar', rotulo: 'Contas e extratos', area: 'lancamentos' },
     { link: '/lancamentos', rotulo: 'Lançamentos', area: 'lancamentos' },

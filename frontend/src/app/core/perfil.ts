@@ -44,6 +44,8 @@ export const porArea: CanActivateFn = (rota) => {
 export const ROTAS_POR_AREA: [string, string][] = [
   ['painel', '/painel'],
   ['comissoes', '/comissoes'],
+  ['comissao_produtoras', '/comissao-produtoras'],
+  ['minha_comissao', '/minha-comissao'],
   ['previsao', '/previsao'],
   ['pagar', '/titulos/pagar'],
   ['receber', '/titulos/receber'],

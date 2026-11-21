@@ -2,6 +2,11 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
   AnaliseOFX,
+  ApuracaoComissao,
+  HistoricoComissao,
+  MetaMes,
+  PlanoComissao,
+  SimulacaoComissao,
   Aprendido,
   Area,
   EventoAuditoria,
@@ -412,5 +417,88 @@ export class Api {
   }
   aging(eid: number, tipo: TipoTitulo) {
     return this.http.get<Aging>(`${this.e(eid)}/relatorios/aging`, { params: params({ tipo }) });
+  }
+
+  // comissão das produtoras
+  private pc(eid: number, id?: number) {
+    return `${this.e(eid)}/planos-comissao${id ? '/' + id : ''}`;
+  }
+  planosComissao(eid: number) {
+    return this.http.get<PlanoComissao[]>(this.pc(eid));
+  }
+  criarPlanosModelo(eid: number) {
+    return this.http.post<PlanoComissao[]>(`${this.pc(eid)}/modelo`, {});
+  }
+  salvarPlano(eid: number, p: PlanoComissao) {
+    return p.id
+      ? this.http.put<PlanoComissao>(this.pc(eid, p.id), p)
+      : this.http.post<PlanoComissao>(this.pc(eid), p);
+  }
+  metasComissao(eid: number, id: number, ano: number) {
+    return this.http.get<MetaMes[]>(`${this.pc(eid, id)}/metas`, { params: params({ ano }) });
+  }
+  salvarMeta(eid: number, id: number, m: MetaMes & { ano: number }) {
+    return this.http.put(`${this.pc(eid, id)}/metas`, m);
+  }
+  ajustarPL(
+    eid: number,
+    id: number,
+    d: { ano: number; mes: number; valor: number; excluidos: string[] },
+  ) {
+    return this.http.put(`${this.pc(eid, id)}/ajuste-pl`, d);
+  }
+  apuracaoComissao(eid: number, id: number, ano: number, mes: number) {
+    return this.http.get<ApuracaoComissao>(`${this.pc(eid, id)}/apuracao`, {
+      params: params({ ano, mes }),
+    });
+  }
+  painelComissao(eid: number, id: number) {
+    return this.http.get<ApuracaoComissao>(`${this.pc(eid, id)}/painel`);
+  }
+  historicoComissao(eid: number, id: number, ano: number) {
+    return this.http.get<HistoricoComissao[]>(`${this.pc(eid, id)}/historico`, {
+      params: params({ ano }),
+    });
+  }
+  simularComissao(
+    eid: number,
+    id: number | null,
+    ano: number,
+    mes: number,
+    pl_extra: number,
+    comissao_extra: number,
+  ) {
+    const url = id ? `${this.pc(eid, id)}/simular` : `${this.e(eid)}/minha-comissao/simular`;
+    return this.http.get<SimulacaoComissao>(url, {
+      params: params({ ano, mes, pl_extra, comissao_extra }),
+    });
+  }
+  gerarContaComissao(eid: number, id: number, ano: number, mes: number) {
+    return this.http.post<{ situacao: string; vencimento?: string; valor?: string }>(
+      `${this.pc(eid, id)}/gerar-conta`,
+      null,
+      { params: params({ ano, mes }) },
+    );
+  }
+  demonstrativoComissao(eid: number, id: number | null, ano: number, mes: number) {
+    const url = id
+      ? `${this.pc(eid, id)}/demonstrativo`
+      : `${this.e(eid)}/minha-comissao/demonstrativo`;
+    return this.http.get(url, { params: params({ ano, mes }), responseType: 'blob' });
+  }
+  sincronizarSaude(eid: number, id: number) {
+    return this.http.post<{ linhas: number }>(`${this.pc(eid, id)}/saude/sincronizar`, {});
+  }
+  importarSaude(eid: number, id: number, arquivo: File) {
+    const f = new FormData();
+    f.append('arquivo', arquivo);
+    return this.http.post<{ linhas: number }>(`${this.pc(eid, id)}/saude/importar`, f);
+  }
+  minhaComissao(eid: number, ano: number, mes: number) {
+    return this.http.get<{
+      painel: ApuracaoComissao;
+      apuracao: ApuracaoComissao;
+      historico: HistoricoComissao[];
+    }>(`${this.e(eid)}/minha-comissao`, { params: params({ ano, mes }) });
   }
 }

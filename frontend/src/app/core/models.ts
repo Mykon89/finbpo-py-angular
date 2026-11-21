@@ -546,3 +546,129 @@ export interface FechamentoDados {
   sugestoes: Sugestao2[];
   analise_ia: string | null;
 }
+
+// comissão das produtoras
+export interface NivelComissao {
+  nome: string;
+  pct: number;
+  pct_saude: number;
+}
+export interface PlanoComissao {
+  id?: number;
+  produtor: string;
+  nome: string;
+  ativo: boolean;
+  niveis: NivelComissao[];
+  regras: Record<string, number>;
+  aliases_indicacao: string[];
+  excluir_ramos: string[];
+  usa_planilha_saude: boolean;
+  planilha_saude_id: string | null;
+  meses_para_pagar: number;
+  contraparte_id: number | null;
+  categoria_id: number | null;
+  usuario_id: number | null;
+}
+export interface ItemComissao {
+  item: string;
+  base: string;
+  pct: string;
+  valor: string;
+}
+export interface ClientePL {
+  chave: string;
+  cliente: string;
+  seguradora: string;
+  ramo: string | null;
+  pl: string;
+  fonte: string;
+  incluido: boolean;
+}
+export interface ApuracaoComissao {
+  plano_id: number;
+  produtor: string;
+  nome: string;
+  ano: number;
+  mes: number;
+  rotulo: string;
+  patrimonial: {
+    pl_clientes: string;
+    ajuste: string;
+    pl: string;
+    faixas: string[] | null;
+    nivel: string;
+    nivel_idx: number | null;
+    pct: string;
+    proxima: string | null;
+    falta: string | null;
+    base: string;
+    estornos: string;
+    valor: string;
+    meta_cadastrada: boolean;
+  };
+  indicacoes: {
+    bruto: string;
+    imposto: string;
+    base: string;
+    pct: string;
+    valor: string;
+    linhas: { data: string; seguradora: string; cliente: string; bruta: string }[];
+  };
+  saude: {
+    linhas: number;
+    fatura: string;
+    pl: string;
+    nivel: string;
+    pct: string;
+    proxima: string | null;
+    itens: ItemComissao[];
+    subtotal: string;
+    meta_cadastrada: boolean;
+  } | null;
+  cartao_informativo: string;
+  saldo_anterior: string;
+  total: string;
+  a_pagar: string;
+  meta_pendente: boolean;
+  clientes_pl: ClientePL[];
+  linhas: {
+    data: string;
+    seguradora: string;
+    ramo: string;
+    cliente: string;
+    bruta: string;
+    parcela: string;
+  }[];
+  dias_passados?: number;
+  dias_mes?: number;
+  pl_projetado?: string;
+  nivel_projetado?: string;
+}
+export interface HistoricoComissao {
+  mes: number;
+  rotulo: string;
+  pl: string;
+  nivel: string;
+  base: string;
+  pct: string;
+  indicacoes: string;
+  saude: string | null;
+  total: string;
+}
+export interface SimulacaoComissao {
+  atual: { nivel: string; total: string };
+  simulado: {
+    nivel: string;
+    pct: string;
+    total: string;
+    pl: string;
+    proxima: string | null;
+    falta: string | null;
+  };
+  ganho: string;
+}
+export interface MetaMes {
+  mes: number;
+  tipo: 'patrimonial' | 'saude';
+  faixas: number[];
+}

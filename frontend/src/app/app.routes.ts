@@ -28,6 +28,12 @@ export const routes: Routes = [
         import('./pages/recorrencias').then((m) => m.Recorrencias),
       ),
       pagina('comissoes', 'comissoes', () => import('./pages/comissoes').then((m) => m.Comissoes)),
+      pagina('comissao-produtoras', 'comissao_produtoras', () =>
+        import('./pages/comissao-produtoras').then((m) => m.ComissaoProdutoras),
+      ),
+      pagina('minha-comissao', 'minha_comissao', () =>
+        import('./pages/minha-comissao').then((m) => m.MinhaComissao),
+      ),
       pagina('previsao', 'previsao', () =>
         import('./pages/previsao').then((m) => m.PrevisaoRecebimentos),
       ),

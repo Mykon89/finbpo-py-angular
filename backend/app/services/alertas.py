@@ -62,7 +62,9 @@ def montar(db: Session, hoje: date | None = None) -> dict:
         }
         if any(b[k] for k in ("atrasadas", "hoje", "proximos", "receber_atrasado", "parcelas", "pendencias", "consentimentos")):
             blocos.append(b)
-    return {"data": hoje, "blocos": blocos}
+    from app.services.comissao_produtor import metas_faltando
+
+    return {"data": hoje, "blocos": blocos, "metas_faltando": metas_faltando(db, hoje)}
 
 
 def _tabela(titulo: str, cab: list[str], linhas: list[list[str]], cor: str = "#1f4e79") -> str:
@@ -79,7 +81,12 @@ def renderizar(a: dict) -> tuple[str, str, str]:
     qtd_atr = sum(len(b["atrasadas"]) for b in a["blocos"])
     assunto = f"FinBPO {d:%d/%m}: " + (f"{qtd_atr} conta(s) em atraso ({brl(total_atr)})" if qtd_atr else "resumo do dia")
     partes, texto = [f'<p style="font-family:Arial">Bom dia! Resumo de {d:%d/%m/%Y}.</p>'], [f"Resumo de {d:%d/%m/%Y}"]
-    if not a["blocos"]:
+    if a.get("metas_faltando"):
+        m = f"{MESES[d.month - 1]}/{d.year}"
+        partes.append(f'<p style="background:#fff7d6;padding:8px"><b>Metas de comissão de {m} não cadastradas:</b> '
+                      f'{html.escape(", ".join(a["metas_faltando"]))}. Pegue com a Kette e cadastre em Comissões das produtoras.</p>')
+        texto.append(f"METAS DE {m} NÃO CADASTRADAS: {', '.join(a['metas_faltando'])} (pegar com a Kette)")
+    if not a["blocos"] and not a.get("metas_faltando"):
         partes.append("<p>Tudo em dia: nada atrasado, vencendo ou pendente.</p>")
         texto.append("Tudo em dia.")
     for b in a["blocos"]:
@@ -121,7 +128,7 @@ def enviar_alerta_do_dia(db: Session, forcar: bool = False) -> str:
     if not forcar and (datetime.now().hour < settings.alertas_hora or _ja_enviado(db, "alerta_diario", hoje.isoformat())):
         return "fora do horário ou já enviado hoje"
     a = montar(db, hoje)
-    if not a["blocos"] and not settings.alertas_sempre and not forcar:
+    if not a["blocos"] and not a["metas_faltando"] and not settings.alertas_sempre and not forcar:
         db.add(RegistroEnvio(tipo="alerta_diario", referencia=hoje.isoformat(), detalhe="nada a avisar"))
         db.commit()
         return "nada a avisar"

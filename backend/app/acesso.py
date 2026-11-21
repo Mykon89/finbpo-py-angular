@@ -22,11 +22,15 @@ AREAS: dict[str, str] = {
     "entidades": "Cadastro das empresas",
     "decisoes": "Central de decisões",
     "aprendizado": "O que o sistema aprendeu",
+    "comissao_produtoras": "Comissões das produtoras (todas)",
+    "minha_comissao": "Minha comissão (só a da própria produtora)",
 }
 
 # caminho (depois de /api/entidades/{id}) -> área
 _MAPA = [
     (r"^/fechamento-mensal", "painel"),
+    (r"^/minha-comissao", "minha_comissao"),
+    (r"^/planos-comissao", "comissao_produtoras"),
     (r"^/comissoes/previsao", "previsao"),
     (r"^/(comissoes|extratos-comissao|fechamento|pasta|importar-planilha)", "comissoes"),
     (r"^/recorrencias", "recorrencias"),

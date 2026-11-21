@@ -280,12 +280,10 @@ export class FechamentoMes {
     const eid = this.ent.id();
     if (!eid) return;
     const [a, m] = this.am();
-    this.api
-      .salvarAnalise(eid, a, m, this.texto)
-      .subscribe({
-        next: () => this.msg.set('Análise salva.'),
-        error: (e) => this.erro.set(mensagemErro(e)),
-      });
+    this.api.salvarAnalise(eid, a, m, this.texto).subscribe({
+      next: () => this.msg.set('Análise salva.'),
+      error: (e) => this.erro.set(mensagemErro(e)),
+    });
   }
 
   verPrevia() {
@@ -293,22 +291,18 @@ export class FechamentoMes {
   }
 
   testar() {
-    this.api
-      .testarAlerta()
-      .subscribe({
-        next: (r) => this.msg.set(`Alerta: ${r.resultado}.`),
-        error: (e) => this.erro.set(mensagemErro(e)),
-      });
+    this.api.testarAlerta().subscribe({
+      next: (r) => this.msg.set(`Alerta: ${r.resultado}.`),
+      error: (e) => this.erro.set(mensagemErro(e)),
+    });
   }
 
   enviarFechamento() {
     const [a, m] = this.am();
-    this.api
-      .enviarFechamento(a, m)
-      .subscribe({
-        next: (r) => this.msg.set(`Fechamento: ${r.resultado}.`),
-        error: (e) => this.erro.set(mensagemErro(e)),
-      });
+    this.api.enviarFechamento(a, m).subscribe({
+      next: (r) => this.msg.set(`Fechamento: ${r.resultado}.`),
+      error: (e) => this.erro.set(mensagemErro(e)),
+    });
   }
 }
 

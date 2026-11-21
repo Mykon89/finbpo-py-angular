@@ -141,6 +141,30 @@ def tarefas_diarias() -> None:
         limpar_importados(db)
         auditoria.limpar_antigos(db)
         bancario.sincronizar_todas(db)
+        _comissoes(db)
+
+
+def _comissoes(db) -> None:
+    """Sincroniza FECHAMENTO e planilha de saúde e cria/atualiza a comissão do mês anterior no contas a pagar."""
+    from app.services import comissao_produtor as cp
+    from app.services import fechamento
+
+    for passo in ("fechamento", "saude", "contas"):
+        try:
+            if passo == "fechamento":
+                from app.models import Entidade
+
+                for ent in db.scalars(select(Entidade).where(Entidade.fechamento_planilha_id.is_not(None), Entidade.ativo.is_(True))):
+                    fechamento.sincronizar(db, ent)
+            elif passo == "saude":
+                for p in db.scalars(select(cp.PlanoComissao).where(cp.PlanoComissao.ativo.is_(True), cp.PlanoComissao.usa_planilha_saude.is_(True),
+                                                                   cp.PlanoComissao.planilha_saude_id.is_not(None))):
+                    cp.sincronizar_saude(db, p)
+            elif passo == "contas":
+                cp.gerar_contas_do_mes(db)
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            log.exception("Comissões: falha no passo %s", passo)
 
 
 _ultimo_dia: list = [None]
